@@ -225,7 +225,7 @@ const ProjectDetail = () => {
                     <a href="mailto:thekevinboyle@gmail.com">Available for Hire</a>
                 </div>
                 <div className="project-footer-right">
-                    © 2025
+                    © 2026
                 </div>
             </footer>
 
