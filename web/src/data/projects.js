@@ -40,6 +40,15 @@ export const projects = [
   },
   // Personal Projects
   {
+    id: 'segf4ult',
+    title: 'SEG_F4ULT',
+    category: 'Marketing site for video destruction toolkit',
+    type: 'personal',
+    size: 'wide',
+    image: '/images/sixpack/segf4ult-site.png',
+    color: '#18181b',
+  },
+  {
     id: 'brewdial',
     title: 'BrewDial',
     category: 'Espresso ratio calculator',
@@ -296,5 +305,21 @@ export const projectDetails = {
       '/images/sixpack/macromini-2.png',
       '/images/sixpack/macromini-3.png',
     ],
+  },
+  segf4ult: {
+    title: 'SEG_F4ULT',
+    category: 'Marketing site for video destruction toolkit',
+    color: '#18181b',
+    skills: ['HTML', 'CSS', 'JavaScript', 'Web Design', 'Motion Design'],
+    year: '2025',
+    role: 'Designer & Developer',
+    roleBlurb: 'Designed and built a marketing site for SEG_F4ULT, a GPU-accelerated real-time video destruction toolkit. Kojima-inspired HUD aesthetic with glitch effects, scanlines, and parallax.',
+    description: 'A marketing site for SEG_F4ULT — a real-time video destruction toolkit with 60+ GPU-accelerated effects, audio-reactive modulation, a step sequencer, and AI vision tracking. The site needed to match the intensity of the tool itself.',
+    workDescription: 'The site uses a military-aerospace HUD aesthetic inspired by Hideo Kojima\'s visual language. Glitch text effects, CRT scanlines, and noise overlays run throughout. Sections walk through effect pages, interface screenshots, capabilities, technical stack, and documentation. Built as a static HTML/CSS/JS site with custom animations and cursor trails.',
+    hero: '/images/sixpack/segf4ult-site.png',
+    gallery: [
+      '/images/sixpack/segf4ult-site.png',
+    ],
+    externalUrl: '/apps/segf4ult/index.html',
   },
 };

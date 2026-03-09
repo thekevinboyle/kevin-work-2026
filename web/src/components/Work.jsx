@@ -10,7 +10,7 @@ const Work = () => {
 
     return (
         <section className="work-section">
-            <SectionLabel index="01" label="Selected Client Work" />
+            <SectionLabel index="01" label="Professional Work" />
             <BentoGrid projects={clientProjects} />
 
             <div className="work-section-spacer" />

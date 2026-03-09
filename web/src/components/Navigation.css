@@ -34,9 +34,15 @@
     font-size: 0.9rem;
     color: var(--text-secondary);
     display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
+    flex-direction: row;
+    gap: 0.5rem;
     grid-column: 3; /* Align with hero-headline start */
+}
+
+.nav-info span + span::before {
+    content: '|';
+    margin-right: 0.5rem;
+    opacity: 0.3;
 }
 
 .nav-links {

@@ -9,6 +9,19 @@ const BentoGrid = ({ projects }) => {
             {projects.map((project, index) => {
                 const details = projectDetails[project.id];
                 const sizeClass = `bento-card--${project.size || 'half'}`;
+                const hasExternalUrl = details?.externalUrl;
+
+                const CardWrapper = hasExternalUrl
+                    ? ({ children }) => (
+                        <a href={details.externalUrl} target="_blank" rel="noopener noreferrer" className="bento-card-link">
+                            {children}
+                        </a>
+                    )
+                    : ({ children }) => (
+                        <Link to={`/work/${project.id}`} className="bento-card-link">
+                            {children}
+                        </Link>
+                    );
 
                 return (
                     <motion.div
@@ -23,10 +36,7 @@ const BentoGrid = ({ projects }) => {
                             ease: [0.16, 1, 0.3, 1]
                         }}
                     >
-                        <Link
-                            to={`/work/${project.id}`}
-                            className="bento-card-link"
-                        >
+                        <CardWrapper>
                             <div
                                 className="bento-card-image-wrapper"
                                 style={{ backgroundColor: project.color }}
@@ -51,7 +61,7 @@ const BentoGrid = ({ projects }) => {
                                     </p>
                                 </div>
                             </div>
-                        </Link>
+                        </CardWrapper>
                     </motion.div>
                 );
             })}

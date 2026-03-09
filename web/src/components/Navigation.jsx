@@ -28,8 +28,8 @@ const Navigation = () => {
 
             {/* Center: Location & Role */}
             <div className="nav-info">
+                <span>Design Engineer</span>
                 <span>Austin, TX</span>
-                <span>Design Technologist</span>
             </div>
 
             {/* Right: Navigation Links */}
