@@ -40,6 +40,15 @@ export const projects = [
   },
   // Personal Projects
   {
+    id: 'narcotic',
+    title: 'Narcotic Custom',
+    category: 'Bespoke perfume platform',
+    type: 'personal',
+    size: 'wide',
+    image: '/images/narcotic/narcotic-landing.png',
+    color: '#0a0a0a',
+  },
+  {
     id: 'segf4ult',
     title: 'SEG_F4ULT',
     category: 'Real-time video destruction toolkit',
@@ -202,6 +211,26 @@ export const projectDetails = {
       '/images/scraped/crypto/crypto-05.png',
       '/images/scraped/crypto/crypto-06.png',
     ],
+  },
+  narcotic: {
+    title: 'Narcotic Custom',
+    category: 'Bespoke perfume platform',
+    color: '#0a0a0a',
+    skills: ['Next.js', 'TypeScript', 'Supabase', 'Stripe', 'UI Design', 'Brand Identity'],
+    year: '2025',
+    role: 'Designer & Developer',
+    roleBlurb: 'Designed and built a direct-to-consumer custom fragrance platform. Ritualistic sensory intake, Stripe checkout, Cal.com consultations, and a full admin dashboard.',
+    description: 'Narcotic Custom is a luxury perfume experience where customers undergo a guided sensory journey to create bespoke fragrances. The platform handles everything from cryptic intake questionnaire to perfumer consultations to delivery.',
+    workDescription: 'The design is intentionally raw and ritual-like. High-contrast brutalist typography, grain textures, and a color journey that descends from white to black as the user goes deeper into introspection. The sensory form uses abstract imagery, word association, and proximity sliders instead of typical dropdowns. Built on Next.js with Supabase, Stripe, Cal.com, and Resend for the full commerce pipeline.',
+    hero: '/images/narcotic/narcotic-landing.png',
+    gallery: [
+      '/images/narcotic/narcotic-landing.png',
+      '/images/narcotic/narcotic-journey.png',
+      '/images/narcotic/narcotic-proximity.png',
+      '/images/narcotic/narcotic-smell.png',
+      '/images/narcotic/narcotic-signature.png',
+    ],
+    externalUrl: 'https://narcotic-custom.vercel.app/',
   },
   // React Six Pack - Design Tools Portfolio
   brewdial: {

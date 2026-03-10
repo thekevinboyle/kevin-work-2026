@@ -2826,9 +2826,13 @@ function App() {
   const initialLoadRef = useRef(true);
   const leftPanelRef = useRef(null);
 
-  // Brief glimpse of normal site before glitch kicks in
+  // Auto-trigger glitch intro only on first visit this session
   useEffect(() => {
-    const timer = setTimeout(() => setGlitchMode(true), 800);
+    if (sessionStorage.getItem('glitch-seen')) return;
+    const timer = setTimeout(() => {
+      setGlitchMode(true);
+      sessionStorage.setItem('glitch-seen', '1');
+    }, 800);
     return () => clearTimeout(timer);
   }, []);
 
