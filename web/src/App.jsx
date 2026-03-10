@@ -378,14 +378,14 @@ function FallingName({ active, onAllFallen }) {
       const angle = Math.random() * Math.PI * 2;
       const force = 4 + Math.random() * 10;
       return {
-        delay: 800 + Math.random() * 2000,
+        delay: 300 + Math.random() * 1000,
         vx: Math.cos(angle) * force,
         vy: Math.sin(angle) * force,
         rotSpeed: (Math.random() - 0.5) * 8,
         friction: 0.97 + Math.random() * 0.02,
         x: 0, y: 0, rot: 0, falling: false,
         dissolveStart: 0, // timestamp when fling starts
-        dissolveDuration: 600 + Math.random() * 800,
+        dissolveDuration: 400 + Math.random() * 500,
         scale: 1,
         blur: 0,
       };
@@ -476,36 +476,36 @@ function useGlitchMelt(glitchMode, leftPanelRef) {
     if (!panel) return;
     startRef.current = performance.now();
 
-    // Phase 0: project index table dissolves first at 0.3-1s
+    // Phase 0: project index table dissolves first at 0.2-0.5s
     const tableEls = panel.querySelectorAll('.project-index, .project-row');
     const phase0 = Array.from(tableEls).map(el => ({
       el,
-      delay: 300 + Math.random() * 700,
-      duration: 1500 + Math.random() * 1000,
+      delay: 200 + Math.random() * 300,
+      duration: 800 + Math.random() * 600,
     }));
 
-    // Phase 1: headings + hero headline dissolve at 1-2s
+    // Phase 1: headings + hero headline dissolve at 0.4-1s
     const headingEls = panel.querySelectorAll('.hero-headline, .about-headline, .section-label, .hero-label__title, .hero-label__years');
     const phase1 = Array.from(headingEls).map(el => ({
       el,
-      delay: 1000 + Math.random() * 1000,
-      duration: 2000 + Math.random() * 1000,
+      delay: 400 + Math.random() * 600,
+      duration: 1000 + Math.random() * 600,
     }));
 
-    // Phase 2: nav elements dissolve at 1.5-2.5s
+    // Phase 2: nav elements dissolve at 0.6-1.2s
     const navEls = panel.querySelectorAll('.nav__info, .nav__links');
     const phase2 = Array.from(navEls).map(el => ({
       el,
-      delay: 1500 + Math.random() * 1000,
-      duration: 1500 + Math.random() * 500,
+      delay: 600 + Math.random() * 600,
+      duration: 800 + Math.random() * 400,
     }));
 
-    // Phase 3: remaining body content dissolves at 2-3.5s
+    // Phase 3: remaining body content dissolves at 0.8-1.5s
     const bodyEls = panel.querySelectorAll('.hero-label, .about-section, .capabilities-section, .experience-section, .left-footer');
     const phase3 = Array.from(bodyEls).map(el => ({
       el,
-      delay: 2000 + Math.random() * 1500,
-      duration: 1500 + Math.random() * 1000,
+      delay: 800 + Math.random() * 700,
+      duration: 800 + Math.random() * 600,
     }));
 
     elemsRef.current = [...phase0, ...phase1, ...phase2, ...phase3];
@@ -615,8 +615,8 @@ function GlitchCenterName({ onExit }) {
 
     renderText(ctx, GLITCH_INTRO[0], dpr);
     const now = performance.now();
-    nextBurstRef.current = now + 1000 + Math.random() * 3000;
-    nextPhraseRef.current = now + 3000 + Math.random() * 4000;
+    nextBurstRef.current = now + 500 + Math.random() * 1500;
+    nextPhraseRef.current = now + 1500 + Math.random() * 2000;
 
     function animate(now) {
       const burst = burstRef.current;
@@ -661,7 +661,7 @@ function GlitchCenterName({ onExit }) {
             transition.active = false;
             transition.phase = 'idle';
             noiseRef.current = buildNoiseMap(dimsRef.current.w);
-            nextPhraseRef.current = now + 3000 + Math.random() * 4000;
+            nextPhraseRef.current = now + 1500 + Math.random() * 2000;
           }
         }
       }
@@ -688,7 +688,7 @@ function GlitchCenterName({ onExit }) {
             burst.active = false;
             ctx.putImageData(originalRef.current, 0, 0);
             noiseRef.current = buildNoiseMap(dimsRef.current.w);
-            nextBurstRef.current = now + 500 + Math.random() * 4000;
+            nextBurstRef.current = now + 300 + Math.random() * 1500;
           }
         }
       }
@@ -710,7 +710,7 @@ function GlitchCenterName({ onExit }) {
 // GLITCH OVERLAY — datamosh / pixel sort destruction canvas
 // ========================
 
-const BLEND_MODES = ['normal']; // temporarily disabled: ['exclusion', 'multiply', 'difference', 'hard-light', 'luminosity'];
+const BLEND_MODES = ['exclusion', 'multiply', 'difference', 'hard-light', 'luminosity'];
 
 function SpectralPortrait() {
   const canvasRef = useRef(null);
@@ -1269,6 +1269,623 @@ function FrameFX() {
   );
 }
 
+// ========================
+// CDJ WAVEFORM — audio-visual instrument with synthesis control + vinyl scrub
+// ========================
+function GlitchWaveform() {
+  const canvasRef = useRef(null);
+  const frameRef = useRef(null);
+  const interactRef = useRef({
+    active: false,
+    x: 0, y: 0,         // normalized 0-1
+    prevX: 0, prevY: 0,
+    velocity: 0,         // px/ms
+    lastMoveTime: 0,
+    lastGlitchTime: 0,
+    // CDJ scrub state
+    targetSample: 0,
+    readHead: 0,
+    stutterPhase: 0,
+    // Saved synth values to restore on release
+    savedParams: null,
+    masterGainBefore: 0.14,
+    // Interaction trail for visual feedback
+    trail: [],
+  });
+  const scrubNodeRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const PANEL_H = 160;
+
+    function resize() {
+      const vw = Math.floor(window.innerWidth * 0.5);
+      canvas.width = vw * dpr;
+      canvas.height = PANEL_H * dpr;
+      canvas.style.width = vw + 'px';
+      canvas.style.height = PANEL_H + 'px';
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Particle field — nodes representing synthesis voices
+    const NUM_PARTICLES = 48;
+    const particles = [];
+    for (let i = 0; i < NUM_PARTICLES; i++) {
+      const bx = (i + 0.5) / NUM_PARTICLES;
+      particles.push({
+        x: bx, y: 0.35 + Math.random() * 0.3,
+        baseX: bx, baseY: 0.35 + Math.random() * 0.3,
+        vx: 0, vy: 0,
+        size: 1.5 + Math.random() * 1.5,
+        energy: 0,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+
+    let scanX = 0;
+    let prevTime = performance.now();
+
+    // HUD helpers (glitch palette: light on dark)
+    const hud = (alpha) => `rgba(255,255,255,${alpha})`;
+    const accent = (alpha) => `rgba(193,68,14,${alpha})`;
+    const font = (size) => `${size}px 'ISO', monospace`;
+
+    function animate() {
+      const now = performance.now();
+      const dt = Math.min(32, now - prevTime);
+      prevTime = now;
+      const t = now * 0.001;
+      const wf = window.__glitchWaveform;
+      const ir = interactRef.current;
+
+      const w = canvas.width;
+      const h = canvas.height;
+
+      // --- BACKGROUND (transparent — glitch overlay shows through) ---
+      ctx.clearRect(0, 0, w, h);
+
+      // Subtle grid
+      ctx.strokeStyle = hud(0.03);
+      ctx.lineWidth = 0.5 * dpr;
+      for (let i = 1; i < 12; i++) {
+        const gx = w * i / 12;
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+      }
+      for (let i = 1; i < 4; i++) {
+        const gy = h * i / 4;
+        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+      }
+
+      // --- AUDIO DATA ---
+      let bassE = 0, midE = 0, hiE = 0;
+      if (wf && wf.freqSnapshots.length > 0) {
+        const snap = wf.freqSnapshots[wf.freqSnapshots.length - 1];
+        bassE = snap.bass / 255;
+        midE = snap.mid / 255;
+        hiE = snap.high / 255;
+      }
+      const totalE = bassE + midE + hiE;
+
+      // --- SCAN LINE ---
+      scanX = (scanX + dt * 0.0003) % 1;
+      const sx = scanX * w;
+      ctx.fillStyle = accent(0.06 + totalE * 0.04);
+      ctx.fillRect(sx, 0, 2 * dpr, h);
+      // Scan glow
+      const scanGrad = ctx.createLinearGradient(sx - 30 * dpr, 0, sx + 30 * dpr, 0);
+      scanGrad.addColorStop(0, 'rgba(193,68,14,0)');
+      scanGrad.addColorStop(0.5, `rgba(193,68,14,${0.03 + totalE * 0.02})`);
+      scanGrad.addColorStop(1, 'rgba(193,68,14,0)');
+      ctx.fillStyle = scanGrad;
+      ctx.fillRect(sx - 30 * dpr, 0, 60 * dpr, h);
+
+      // --- UPDATE PARTICLES ---
+      const mx = ir.active ? ir.x : -1;
+      const my = ir.active ? ir.y : -1;
+
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        // Audio energy drives vertical displacement per frequency bin
+        const binRatio = i / NUM_PARTICLES;
+        let audioDisplace = 0;
+        if (binRatio < 0.2) audioDisplace = bassE * 0.15;
+        else if (binRatio < 0.6) audioDisplace = midE * 0.12;
+        else audioDisplace = hiE * 0.1;
+
+        // Breathe around base position
+        const breathX = Math.sin(t * 0.7 + p.phase) * 0.008;
+        const breathY = Math.cos(t * 0.5 + p.phase * 1.3) * 0.02 + audioDisplace * Math.sin(t * 2 + i);
+
+        let targetX = p.baseX + breathX;
+        let targetY = p.baseY + breathY;
+
+        // Mouse gravity when interacting
+        if (ir.active) {
+          const dx = mx - p.x;
+          const dy = my - p.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const radius = 0.15;
+          if (dist < radius) {
+            const force = (1 - dist / radius) * 0.4;
+            // Attract particles toward cursor
+            targetX = p.x + dx * force;
+            targetY = p.y + dy * force;
+            p.energy = Math.min(1, p.energy + 0.1);
+          }
+        }
+
+        // Spring physics
+        p.vx += (targetX - p.x) * 0.08;
+        p.vy += (targetY - p.y) * 0.08;
+        p.vx *= 0.85;
+        p.vy *= 0.85;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.energy *= 0.95;
+
+        // Audio energy per particle
+        p.energy = Math.max(p.energy, audioDisplace * 2);
+      }
+
+      // --- CONNECTIONS ---
+      const connDist = 0.07;
+      ctx.lineWidth = 0.5 * dpr;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const a = particles[i], b = particles[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < connDist) {
+            const alpha = (1 - d / connDist) * 0.12 * (1 + (a.energy + b.energy));
+            ctx.strokeStyle = ir.active ? accent(alpha) : hud(alpha);
+            ctx.beginPath();
+            ctx.moveTo(a.x * w, a.y * h);
+            ctx.lineTo(b.x * w, b.y * h);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // --- DRAW PARTICLES ---
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        const px = p.x * w;
+        const py = p.y * h;
+        const binRatio = i / NUM_PARTICLES;
+        const sz = (p.size + p.energy * 3) * dpr;
+
+        // Color by frequency band
+        let r, g, b2;
+        if (binRatio < 0.2) { r = 80; g = 120; b2 = 200; }       // bass — blue
+        else if (binRatio < 0.6) { r = 180; g = 180; b2 = 180; }  // mid — white
+        else { r = 193; g = 68; b2 = 14; }                          // high — accent red
+        const alpha = 0.3 + p.energy * 0.5;
+
+        ctx.fillStyle = `rgba(${r},${g},${b2},${alpha})`;
+        ctx.beginPath();
+        ctx.arc(px, py, sz, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Glow ring on energized particles
+        if (p.energy > 0.2) {
+          ctx.strokeStyle = `rgba(${r},${g},${b2},${p.energy * 0.3})`;
+          ctx.lineWidth = 0.5 * dpr;
+          ctx.beginPath();
+          ctx.arc(px, py, sz + 3 * dpr, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      // --- WAVEFORM TRACE (bottom edge) ---
+      if (wf && wf.writePos > 1024) {
+        const traceY = h * 0.85;
+        const traceH = h * 0.1;
+        ctx.strokeStyle = hud(0.12);
+        ctx.lineWidth = 0.75 * dpr;
+        ctx.beginPath();
+        const traceCols = Math.floor(w / dpr);
+        const samplesPerT = Math.floor(1024 * NUM_PARTICLES / traceCols);
+        const traceStart = Math.max(0, wf.writePos - traceCols * samplesPerT);
+        for (let i = 0; i < traceCols; i++) {
+          const si = traceStart + i * samplesPerT;
+          if (si >= wf.writePos) break;
+          const s = wf.samples[si % wf.maxSamples];
+          const px = i * dpr;
+          const py = traceY + s * traceH;
+          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+
+      // --- HUD OVERLAY ---
+      // Corner brackets
+      const bSz = 8 * dpr;
+      const pad = 6 * dpr;
+      ctx.strokeStyle = hud(ir.active ? 0.25 : 0.12);
+      ctx.lineWidth = 0.75 * dpr;
+      // TL
+      ctx.beginPath(); ctx.moveTo(pad, pad + bSz); ctx.lineTo(pad, pad); ctx.lineTo(pad + bSz, pad); ctx.stroke();
+      // TR
+      ctx.beginPath(); ctx.moveTo(w - pad - bSz, pad); ctx.lineTo(w - pad, pad); ctx.lineTo(w - pad, pad + bSz); ctx.stroke();
+      // BL
+      ctx.beginPath(); ctx.moveTo(pad, h - pad - bSz); ctx.lineTo(pad, h - pad); ctx.lineTo(pad + bSz, h - pad); ctx.stroke();
+      // BR
+      ctx.beginPath(); ctx.moveTo(w - pad - bSz, h - pad); ctx.lineTo(w - pad, h - pad); ctx.lineTo(w - pad, h - pad - bSz); ctx.stroke();
+
+      // Labels
+      ctx.font = font(7 * dpr);
+      ctx.fillStyle = hud(0.2);
+      ctx.fillText('SYNTHESIS CONTROL', pad + 2 * dpr, pad + bSz + 10 * dpr);
+
+      // Timecode
+      const mins = Math.floor(t / 60).toString().padStart(2, '0');
+      const secs = Math.floor(t % 60).toString().padStart(2, '0');
+      const frames = Math.floor((t * 24) % 24).toString().padStart(2, '0');
+      ctx.fillStyle = hud(0.15);
+      ctx.fillText(`${mins}:${secs}:${frames}`, w - pad - 50 * dpr, pad + bSz + 10 * dpr);
+
+      // Audio levels
+      ctx.fillStyle = hud(0.15);
+      ctx.fillText(`BASS ${(bassE * 100).toFixed(0).padStart(3)}`, pad + 2 * dpr, h - pad - 20 * dpr);
+      ctx.fillText(`MID  ${(midE * 100).toFixed(0).padStart(3)}`, pad + 55 * dpr, h - pad - 20 * dpr);
+      ctx.fillText(`HIGH ${(hiE * 100).toFixed(0).padStart(3)}`, pad + 108 * dpr, h - pad - 20 * dpr);
+
+      // Level bars
+      const barY = h - pad - 8 * dpr;
+      const barH = 3 * dpr;
+      const barW = 40 * dpr;
+      [[pad + 2 * dpr, bassE, '80,120,200'], [pad + 55 * dpr, midE, '180,180,180'], [pad + 108 * dpr, hiE, '193,68,14']].forEach(([bx, val, col]) => {
+        ctx.fillStyle = hud(0.06);
+        ctx.fillRect(bx, barY, barW, barH);
+        ctx.fillStyle = `rgba(${col},${0.3 + val * 0.4})`;
+        ctx.fillRect(bx, barY, barW * Math.min(1, val), barH);
+      });
+
+      // --- INTERACTION HUD ---
+      if (ir.active) {
+        const ix = ir.x * w;
+        const iy = ir.y * h;
+
+        // Crosshair
+        ctx.strokeStyle = hud(0.35);
+        ctx.lineWidth = 0.75 * dpr;
+        const chSz = 12 * dpr;
+        ctx.beginPath();
+        ctx.moveTo(ix - chSz, iy); ctx.lineTo(ix - 3 * dpr, iy);
+        ctx.moveTo(ix + 3 * dpr, iy); ctx.lineTo(ix + chSz, iy);
+        ctx.moveTo(ix, iy - chSz); ctx.lineTo(ix, iy - 3 * dpr);
+        ctx.moveTo(ix, iy + 3 * dpr); ctx.lineTo(ix, iy + chSz);
+        ctx.stroke();
+
+        // Crosshair rings
+        ctx.strokeStyle = hud(0.08);
+        ctx.beginPath(); ctx.arc(ix, iy, 20 * dpr, 0, Math.PI * 2); ctx.stroke();
+        // Rotating arc
+        ctx.strokeStyle = accent(0.2);
+        ctx.beginPath(); ctx.arc(ix, iy, 28 * dpr, t * 2 % (Math.PI * 2), (t * 2 + 1.2) % (Math.PI * 2)); ctx.stroke();
+
+        // Parameter readout near cursor
+        ctx.font = font(6 * dpr);
+        ctx.fillStyle = hud(0.4);
+        const lx = ix + 18 * dpr;
+        const ly = iy - 12 * dpr;
+        // X maps to filter freq
+        const freqVal = 200 * Math.pow(40, ir.x);
+        ctx.fillText(`FREQ ${Math.floor(freqVal)}Hz`, lx, ly);
+        // Y maps to Q
+        const qVal = 5 + (1 - ir.y) * 40;
+        ctx.fillText(`Q ${qVal.toFixed(1)}`, lx, ly + 9 * dpr);
+        ctx.fillText(`VEL ${ir.velocity.toFixed(1)}`, lx, ly + 18 * dpr);
+
+        // Interaction trail
+        ir.trail.push({ x: ix, y: iy, t: now, v: ir.velocity });
+        while (ir.trail.length > 0 && now - ir.trail[0].t > 400) ir.trail.shift();
+        for (let i = 0; i < ir.trail.length; i++) {
+          const pt = ir.trail[i];
+          const age = (now - pt.t) / 400;
+          ctx.fillStyle = accent(Math.max(0, (1 - age) * 0.25));
+          const sz = (1 + pt.v * 0.015) * dpr;
+          ctx.fillRect(pt.x - sz, pt.y - sz, sz * 2, sz * 2);
+        }
+
+        // Dashed guide lines to edges
+        ctx.setLineDash([3 * dpr, 4 * dpr]);
+        ctx.strokeStyle = hud(0.04);
+        ctx.beginPath(); ctx.moveTo(ix, 0); ctx.lineTo(ix, h); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, iy); ctx.lineTo(w, iy); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Read head indicator on waveform trace
+        const totalRec = Math.min(wf ? wf.writePos : 0, wf ? wf.maxSamples : 0);
+        if (totalRec > 0) {
+          const rhRatio = ir.readHead / totalRec;
+          const rhx = Math.max(0, Math.min(rhRatio * w, w));
+          ctx.fillStyle = accent(0.4);
+          ctx.fillRect(rhx - 0.5 * dpr, h * 0.78, 1 * dpr, h * 0.2);
+        }
+      }
+
+      // Blinking rec dot
+      if (Math.sin(t * 3) > 0) {
+        ctx.fillStyle = accent(0.5);
+        ctx.beginPath(); ctx.arc(w - pad - 8 * dpr, h - pad - 20 * dpr, 2 * dpr, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.font = font(6 * dpr);
+      ctx.fillStyle = hud(0.2);
+      ctx.fillText('REC', w - pad - 22 * dpr, h - pad - 17 * dpr);
+
+      // Top/bottom accent lines
+      ctx.fillStyle = accent(ir.active ? 0.4 : 0.2);
+      ctx.fillRect(0, 0, w, 1);
+      ctx.fillRect(0, h - 1, w, 1);
+
+      frameRef.current = requestAnimationFrame(animate);
+    }
+    frameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      cancelAnimationFrame(frameRef.current);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  // Map interaction to synthesis parameters
+  const modulateSynth = (x, y, velocity) => {
+    const synth = window.__glitchSynth;
+    if (!synth) return;
+    const t = synth.audioCtx.currentTime;
+    const ramp = 0.03; // 30ms ramp for smooth control
+
+    // X axis: filter frequency sweep (low left → high right)
+    // Noise filter: 200Hz – 8000Hz (exponential)
+    const noiseFreq = 200 * Math.pow(40, x);
+    synth.noiseFilter.frequency.linearRampToValueAtTime(noiseFreq, t + ramp);
+    // Sub filter opens with X too: 60Hz – 400Hz
+    const subFreq = 60 + x * 340;
+    synth.subFilter.frequency.linearRampToValueAtTime(subFreq, t + ramp);
+
+    // Y axis: timbre — top (y=0) = bright/harsh, bottom (y=1) = dark/sub
+    // Noise filter Q: high at top for screaming resonance
+    const noiseQ = 5 + (1 - y) * 40;
+    synth.noiseFilter.Q.linearRampToValueAtTime(noiseQ, t + ramp);
+    // Mid gain: louder at top
+    synth.midGain.gain.linearRampToValueAtTime(0.02 + (1 - y) * 0.14, t + ramp);
+    // Hi gain: louder at top
+    synth.hiGain.gain.linearRampToValueAtTime(0.005 + (1 - y) * 0.04, t + ramp);
+    // Noise gain: louder at top
+    synth.noiseGain.gain.linearRampToValueAtTime(0.1 + (1 - y) * 0.25, t + ramp);
+    // Sub gain: louder at bottom
+    synth.subGain.gain.linearRampToValueAtTime(0.15 + y * 0.3, t + ramp);
+    // Ring mod: more present in the middle
+    const ringAmt = Math.sin(y * Math.PI) * 0.08;
+    synth.ringOut.gain.linearRampToValueAtTime(ringAmt, t + ramp);
+
+    // Velocity triggers glitch events
+    if (velocity > 8) {
+      const now = performance.now();
+      const ir = interactRef.current;
+      if (now - ir.lastGlitchTime > 80) {
+        ir.lastGlitchTime = now;
+        if (velocity > 25) {
+          synth.fireBlast();
+          synth.fireKick();
+        } else if (velocity > 15) {
+          synth.fireStutter();
+        } else {
+          synth.fireGlitch();
+        }
+      }
+    }
+  };
+
+  // Save current synth param values to restore on release
+  const saveParams = () => {
+    const synth = window.__glitchSynth;
+    if (!synth) return null;
+    return {
+      noiseFreq: synth.noiseFilter.frequency.value,
+      noiseQ: synth.noiseFilter.Q.value,
+      subFreq: synth.subFilter.frequency.value,
+      midGain: synth.midGain.gain.value,
+      hiGain: synth.hiGain.gain.value,
+      noiseGain: synth.noiseGain.gain.value,
+      subGain: synth.subGain.gain.value,
+      ringOut: synth.ringOut.gain.value,
+    };
+  };
+
+  // Restore synth params with smooth ramp
+  const restoreParams = (saved) => {
+    const synth = window.__glitchSynth;
+    if (!synth || !saved) return;
+    const t = synth.audioCtx.currentTime;
+    const ramp = 0.3; // 300ms ease back
+    synth.noiseFilter.frequency.linearRampToValueAtTime(saved.noiseFreq, t + ramp);
+    synth.noiseFilter.Q.linearRampToValueAtTime(saved.noiseQ, t + ramp);
+    synth.subFilter.frequency.linearRampToValueAtTime(saved.subFreq, t + ramp);
+    synth.midGain.gain.linearRampToValueAtTime(saved.midGain, t + ramp);
+    synth.hiGain.gain.linearRampToValueAtTime(saved.hiGain, t + ramp);
+    synth.noiseGain.gain.linearRampToValueAtTime(saved.noiseGain, t + ramp);
+    synth.subGain.gain.linearRampToValueAtTime(saved.subGain, t + ramp);
+    synth.ringOut.gain.linearRampToValueAtTime(saved.ringOut, t + ramp);
+  };
+
+  const startInteract = (e) => {
+    e.stopPropagation();
+    const audioCtx = window.__glitchAudioCtx;
+    const wf = window.__glitchWaveform;
+    if (!audioCtx || !wf || wf.writePos === 0) return;
+
+    const ir = interactRef.current;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+
+    ir.active = true;
+    ir.x = x; ir.y = y;
+    ir.prevX = x; ir.prevY = y;
+    ir.velocity = 0;
+    ir.lastMoveTime = performance.now();
+    ir.stutterPhase = 0;
+    ir.trail = [];
+    ir.lastGlitchTime = 0;
+
+    // Save current synth state and duck live audio
+    ir.savedParams = saveParams();
+    const master = window.__glitchMaster;
+    if (master) {
+      ir.masterGainBefore = master.gain.value;
+      master.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
+    }
+
+    // Compute scrub position
+    const totalRecorded = Math.min(wf.writePos, wf.maxSamples);
+    const samplePos = Math.floor(x * totalRecorded);
+    ir.targetSample = samplePos;
+    ir.readHead = samplePos;
+
+    // Apply initial synth modulation
+    modulateSynth(x, y, 0);
+
+    // Create scrub output node for vinyl playback
+    const scrubNode = audioCtx.createScriptProcessor(1024, 0, 1);
+    const scrubGain = audioCtx.createGain();
+    scrubGain.gain.value = 1.0;
+
+    scrubNode.onaudioprocess = (evt) => {
+      const output = evt.outputBuffer.getChannelData(0);
+      const w = window.__glitchWaveform;
+      if (!w || !ir.active) { output.fill(0); return; }
+
+      const total = Math.min(w.writePos, w.maxSamples);
+      if (total === 0) { output.fill(0); return; }
+
+      // Read sample from circular buffer by absolute position
+      const getSample = (absIdx) => {
+        const clamped = Math.max(0, Math.min(absIdx, total - 1));
+        // Oldest sample in buffer is at writePos % maxSamples
+        // Map absolute index [0..total-1] to circular buffer position
+        const oldest = w.writePos > w.maxSamples ? (w.writePos % w.maxSamples) : 0;
+        return w.samples[(oldest + clamped) % w.maxSamples];
+      };
+
+      const now = performance.now();
+      const timeSinceMove = now - ir.lastMoveTime;
+      const isMoving = timeSinceMove < 100;
+      const diff = ir.targetSample - ir.readHead;
+
+      if (isMoving && Math.abs(diff) > 50) {
+        // Dragging — play toward target (forward or reverse)
+        const step = diff / output.length;
+        const clampedStep = Math.sign(step) * Math.min(Math.abs(step), 4);
+        for (let i = 0; i < output.length; i++) {
+          output[i] = getSample(Math.floor(ir.readHead));
+          ir.readHead += clampedStep;
+        }
+        ir.stutterPhase = 0;
+      } else {
+        // Stationary — DAW-style loop (~500ms centered on target)
+        const loopLen = Math.floor(w.sampleRate * 0.5);
+        const halfLoop = Math.floor(loopLen / 2);
+        const loopStart = Math.max(0, ir.targetSample - halfLoop);
+        const fadeLen = Math.floor(w.sampleRate * 0.008); // 8ms crossfade
+        for (let i = 0; i < output.length; i++) {
+          const phase = ir.stutterPhase % loopLen;
+          let gain = 1;
+          if (phase < fadeLen) gain = phase / fadeLen;
+          else if (phase > loopLen - fadeLen) gain = (loopLen - phase) / fadeLen;
+          output[i] = getSample(loopStart + phase) * gain;
+          ir.stutterPhase++;
+        }
+        ir.readHead = ir.targetSample;
+      }
+    };
+
+    scrubNode.connect(scrubGain);
+    scrubGain.connect(audioCtx.destination);
+    scrubNodeRef.current = { node: scrubNode, gain: scrubGain };
+  };
+
+  const moveInteract = (e) => {
+    const ir = interactRef.current;
+    if (!ir.active) return;
+    const wf = window.__glitchWaveform;
+    if (!wf || wf.writePos === 0) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    const now = performance.now();
+    const dt = Math.max(1, now - ir.lastMoveTime);
+
+    // Velocity in normalized units per ms → scale to usable range
+    const dx = x - ir.prevX;
+    const dy = y - ir.prevY;
+    const dist = Math.sqrt(dx * dx + dy * dy) * rect.width; // px
+    ir.velocity = dist / dt * 16; // scale for sensitivity
+
+    ir.prevX = ir.x;
+    ir.prevY = ir.y;
+    ir.x = x;
+    ir.y = y;
+    ir.lastMoveTime = now;
+
+    // Update scrub target
+    const totalRecorded = Math.min(wf.writePos, wf.maxSamples);
+    ir.targetSample = Math.floor(x * totalRecorded);
+
+    // Modulate synthesis in real-time
+    modulateSynth(x, y, ir.velocity);
+  };
+
+  const endInteract = () => {
+    const ir = interactRef.current;
+    if (!ir.active) return;
+    ir.active = false;
+    ir.trail = [];
+
+    // Disconnect scrub node
+    if (scrubNodeRef.current) {
+      try { scrubNodeRef.current.node.disconnect(); } catch (ex) { /* noop */ }
+      try { scrubNodeRef.current.gain.disconnect(); } catch (ex) { /* noop */ }
+      scrubNodeRef.current = null;
+    }
+
+    // Restore live audio and synth parameters
+    const audioCtx = window.__glitchAudioCtx;
+    const master = window.__glitchMaster;
+    if (audioCtx && master) {
+      master.gain.linearRampToValueAtTime(ir.masterGainBefore || 0.14, audioCtx.currentTime + 0.15);
+    }
+    restoreParams(ir.savedParams);
+    ir.savedParams = null;
+  };
+
+  return (
+    <canvas
+      ref={canvasRef}
+      onMouseDown={startInteract}
+      onMouseMove={moveInteract}
+      onMouseUp={endInteract}
+      onMouseLeave={endInteract}
+      style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        width: '50vw',
+        height: '160px',
+        cursor: 'crosshair',
+        zIndex: 10001,
+      }}
+    />
+  );
+}
+
 function GlitchOverlay() {
   const canvasRef = useRef(null);
   const frameRef = useRef(null);
@@ -1331,8 +1948,52 @@ function GlitchOverlay() {
 
     const master = audioCtx.createGain();
     master.gain.value = 0.14;
+    window.__glitchMaster = master;
     master.connect(analyser);
     analyser.connect(audioCtx.destination);
+
+    // --- CDJ WAVEFORM RECORDER — capture audio for waveform display + scrub ---
+    const recorderNode = audioCtx.createScriptProcessor(2048, 1, 1);
+    const maxRecordSamples = audioCtx.sampleRate * 120; // 2 min buffer
+    if (!window.__glitchWaveform || window.__glitchWaveform.sampleRate !== audioCtx.sampleRate) {
+      window.__glitchWaveform = {
+        samples: new Float32Array(maxRecordSamples),
+        writePos: 0,
+        maxSamples: maxRecordSamples,
+        sampleRate: audioCtx.sampleRate,
+        freqSnapshots: [],
+      };
+    }
+    recorderNode.onaudioprocess = (e) => {
+      const input = e.inputBuffer.getChannelData(0);
+      const wf = window.__glitchWaveform;
+      if (!wf) return;
+      for (let i = 0; i < input.length; i++) {
+        wf.samples[wf.writePos % wf.maxSamples] = input[i];
+        wf.writePos++;
+      }
+      // Snapshot frequency data for CDJ coloring
+      analyser.getByteFrequencyData(freqData);
+      const bins = freqData.length;
+      let bass = 0, mid = 0, high = 0;
+      const bassEnd = Math.floor(bins * 0.12);
+      const midEnd = Math.floor(bins * 0.45);
+      for (let i = 0; i < bins; i++) {
+        if (i < bassEnd) bass += freqData[i];
+        else if (i < midEnd) mid += freqData[i];
+        else high += freqData[i];
+      }
+      wf.freqSnapshots.push({
+        bass: bass / bassEnd,
+        mid: mid / (midEnd - bassEnd),
+        high: high / (bins - midEnd),
+      });
+    };
+    const recorderSilence = audioCtx.createGain();
+    recorderSilence.gain.value = 0;
+    analyser.connect(recorderNode);
+    recorderNode.connect(recorderSilence);
+    recorderSilence.connect(audioCtx.destination);
 
     const now = audioCtx.currentTime;
 
@@ -1470,13 +2131,13 @@ function GlitchOverlay() {
     const noiseFilter = audioCtx.createBiquadFilter();
     noiseFilter.type = 'bandpass';
     noiseFilter.frequency.value = 2000;
-    noiseFilter.Q.value = 35;
-    // Distort the noise for harsher texture
+    noiseFilter.Q.value = 45;
+    // Distort the noise — hard clip for abrasive bite
     const noiseDist = audioCtx.createWaveShaper();
     const noiseDistCurve = new Float32Array(256);
     for (let i = 0; i < 256; i++) {
       const x = (i / 128) - 1;
-      noiseDistCurve[i] = Math.sign(x) * Math.pow(Math.abs(x), 0.4);
+      noiseDistCurve[i] = Math.tanh(x * 6);
     }
     noiseDist.curve = noiseDistCurve;
     noise.connect(noiseGain);
@@ -1768,7 +2429,7 @@ function GlitchOverlay() {
     const stutterDistCurve = new Float32Array(256);
     for (let i = 0; i < 256; i++) {
       const x = (i / 128) - 1;
-      stutterDistCurve[i] = Math.tanh(x * 5);
+      stutterDistCurve[i] = Math.tanh(x * 8);
     }
     stutterDist.curve = stutterDistCurve;
     stutterGain.connect(stutterDist);
@@ -1777,37 +2438,37 @@ function GlitchOverlay() {
     function fireStutterBurst() {
       const t = audioCtx.currentTime;
       const sr = audioCtx.sampleRate;
-      // Generate a tiny grain (1-15ms) and repeat it rapidly
-      const grainLen = Math.floor(sr * (0.001 + Math.random() * 0.014));
+      // Generate a tiny grain (0.5-6ms) — very short for snappy transients
+      const grainLen = Math.floor(sr * (0.0005 + Math.random() * 0.0055));
       const grain = audioCtx.createBuffer(1, grainLen, sr);
       const gd = grain.getChannelData(0);
       // Random grain source: noise, sine, or square
       const grainType = Math.random();
-      if (grainType < 0.4) {
-        // Noise grain
-        for (let i = 0; i < grainLen; i++) gd[i] = (Math.random() * 2 - 1) * 0.9;
-      } else if (grainType < 0.7) {
-        // Sine grain with random freq
-        const f = 60 + Math.random() * 800;
-        for (let i = 0; i < grainLen; i++) gd[i] = Math.sin(2 * Math.PI * f * i / sr) * 0.9;
+      if (grainType < 0.5) {
+        // Noise grain — most common for abrasive texture
+        for (let i = 0; i < grainLen; i++) gd[i] = (Math.random() * 2 - 1);
+      } else if (grainType < 0.75) {
+        // Square pulse grain — hard edges
+        const f = 80 + Math.random() * 600;
+        for (let i = 0; i < grainLen; i++) gd[i] = (Math.sin(2 * Math.PI * f * i / sr) > 0 ? 1 : -1);
       } else {
-        // Square pulse grain
-        const f = 40 + Math.random() * 400;
-        for (let i = 0; i < grainLen; i++) gd[i] = (Math.sin(2 * Math.PI * f * i / sr) > 0 ? 0.9 : -0.9);
+        // DC click — maximum snap
+        gd[0] = 1; if (grainLen > 1) gd[1] = -1;
+        for (let i = 2; i < grainLen; i++) gd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (grainLen * 0.15));
       }
 
-      // Fire a burst of 4-20 rapid repetitions
-      const reps = 4 + Math.floor(Math.random() * 16);
-      const gap = 0.005 + Math.random() * 0.04; // 5-45ms between reps
+      // Fire a burst of 6-30 rapid repetitions
+      const reps = 6 + Math.floor(Math.random() * 24);
+      const gap = 0.002 + Math.random() * 0.015; // 2-17ms between reps — tighter
       for (let r = 0; r < reps; r++) {
         const src = audioCtx.createBufferSource();
         src.buffer = grain;
-        // Pitch variation across burst
-        src.playbackRate.value = 0.5 + Math.random() * 2.5;
+        src.playbackRate.value = 0.8 + Math.random() * 3;
         const env = audioCtx.createGain();
-        // Accent the first and random hits
-        env.gain.setValueAtTime(r === 0 || Math.random() < 0.3 ? 1.0 : 0.4 + Math.random() * 0.4, t + r * gap);
-        env.gain.linearRampToValueAtTime(0, t + r * gap + grainLen / sr + 0.01);
+        // Hard attack, instant decay — no tail
+        const hitGain = r === 0 || Math.random() < 0.35 ? 1.0 : 0.5 + Math.random() * 0.5;
+        env.gain.setValueAtTime(hitGain, t + r * gap);
+        env.gain.exponentialRampToValueAtTime(0.001, t + r * gap + grainLen / sr + 0.003);
         src.connect(env);
         env.connect(stutterGain);
         src.start(t + r * gap);
@@ -1829,8 +2490,8 @@ function GlitchOverlay() {
     blastGain.gain.value = 0.5;
     const blastFilter = audioCtx.createBiquadFilter();
     blastFilter.type = 'highpass';
-    blastFilter.frequency.value = 800;
-    blastFilter.Q.value = 2;
+    blastFilter.frequency.value = 1200;
+    blastFilter.Q.value = 6;
     const blastDist = audioCtx.createWaveShaper();
     const blastDistCurve = new Float32Array(256);
     for (let i = 0; i < 256; i++) {
@@ -1845,8 +2506,8 @@ function GlitchOverlay() {
     function fireNoiseBlast() {
       const t = audioCtx.currentTime;
       const sr = audioCtx.sampleRate;
-      // Duration: 30ms to 500ms
-      const dur = 0.03 + Math.random() * 0.47;
+      // Duration: 10ms to 150ms — short and snappy
+      const dur = 0.01 + Math.random() * 0.14;
       const len = Math.floor(sr * dur);
       const buf = audioCtx.createBuffer(1, len, sr);
       const data = buf.getChannelData(0);
@@ -1857,22 +2518,21 @@ function GlitchOverlay() {
         for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1);
       } else if (blastType < 0.6) {
         // Gated noise — staccato chops
-        const gateLen = Math.floor(sr * (0.008 + Math.random() * 0.02));
+        const gateLen = Math.floor(sr * (0.003 + Math.random() * 0.008));
         for (let i = 0; i < len; i++) {
           data[i] = (i % (gateLen * 2) < gateLen) ? (Math.random() * 2 - 1) : 0;
         }
       } else if (blastType < 0.8) {
-        // Noise with descending filter sweep (baked in)
+        // Noise with fast descending sweep
         for (let i = 0; i < len; i++) {
           const pos = i / len;
-          const cutoff = 1 - pos * 0.8; // descending brightness
+          const cutoff = 1 - pos * 0.95;
           const raw = Math.random() * 2 - 1;
-          // Simple 1-pole lowpass approximation
           data[i] = i === 0 ? raw * cutoff : data[i - 1] + cutoff * (raw - data[i - 1]);
         }
       } else {
-        // Crunch burst — bit-reduced noise
-        const bits = 2 + Math.floor(Math.random() * 3);
+        // Crunch burst — harsh bit-reduced noise
+        const bits = 1 + Math.floor(Math.random() * 2);
         const levels = Math.pow(2, bits);
         for (let i = 0; i < len; i++) {
           data[i] = Math.round((Math.random() * 2 - 1) * levels) / levels;
@@ -1881,11 +2541,11 @@ function GlitchOverlay() {
 
       const src = audioCtx.createBufferSource();
       src.buffer = buf;
-      src.playbackRate.value = 0.5 + Math.random() * 2;
+      src.playbackRate.value = 0.8 + Math.random() * 3;
       const env = audioCtx.createGain();
-      // Sharp attack, variable release
-      env.gain.setValueAtTime(0.7 + Math.random() * 0.3, t);
-      env.gain.linearRampToValueAtTime(0, t + dur);
+      // Instant attack, exponential decay — snappy
+      env.gain.setValueAtTime(1.0, t);
+      env.gain.exponentialRampToValueAtTime(0.001, t + dur);
       src.connect(env);
       env.connect(blastGain);
       src.start(t);
@@ -2125,6 +2785,18 @@ function GlitchOverlay() {
     master.gain.setValueAtTime(0, startTime);
     master.gain.linearRampToValueAtTime(0.18, startTime + 2);
 
+    // Expose synthesis nodes for instrument interaction
+    window.__glitchSynth = {
+      noiseFilter, noiseGain, subFilter, subGain,
+      midGain, midFilter, hiGain, ringOut,
+      glitchGain, master, audioCtx,
+      // For triggering glitch events from interaction
+      fireGlitch: () => { if (alive) scheduleGlitch(); },
+      fireStutter: () => { if (alive) fireStutterBurst(); },
+      fireKick: () => { if (alive) fire808Kick(); },
+      fireBlast: () => { if (alive) fireNoiseBlast(); },
+    };
+
     // ---- VISUAL: pixel sort with audio-reactive displacement ----
     const scale = 0.35;
     let w, h;
@@ -2187,12 +2859,11 @@ function GlitchOverlay() {
     let portraitReady = false;
     let portraitCanvas = null;
     portraitImg.onload = () => {
-      // Pre-render dithered version to an offscreen canvas
+      // Pre-render dithered version to an offscreen canvas — fill canvas height
       const pc = document.createElement('canvas');
-      const maxH = h * 0.7;
-      const pScale = Math.min(1, maxH / portraitImg.height);
+      const pScale = h / portraitImg.height;
       const pw = Math.floor(portraitImg.width * pScale);
-      const ph = Math.floor(portraitImg.height * pScale);
+      const ph = h;
       pc.width = pw;
       pc.height = ph;
       const pctx = pc.getContext('2d', { willReadFrequently: true });
@@ -2883,8 +3554,9 @@ function GlitchOverlay() {
           const fadeIn = Math.min(1, elapsed2 / 400);
           const fadeOut = Math.min(1, remaining / 400);
           ctx.globalAlpha = Math.min(fadeIn, fadeOut) * 0.35;
-          // Center the portrait on the canvas
-          const px = Math.floor((w - portraitCanvas.width) / 2);
+          // Center the portrait within the left half of the canvas
+          const halfW = Math.floor(w / 2);
+          const px = Math.floor((halfW - portraitCanvas.width) / 2);
           const py = Math.floor((h - portraitCanvas.height) / 2);
           ctx.drawImage(portraitCanvas, px, py);
           ctx.restore();
@@ -2912,6 +3584,11 @@ function GlitchOverlay() {
       document.removeEventListener('touchstart', unlockAudio);
       document.removeEventListener('mousemove', unlockAudio);
       document.removeEventListener('scroll', unlockAudio);
+      // Disconnect waveform recorder
+      try { recorderNode.disconnect(); } catch(e) {}
+      window.__glitchWaveform = null;
+      window.__glitchMaster = null;
+      window.__glitchSynth = null;
       // Fade out audio then close
       try {
         const t = audioCtx.currentTime;
@@ -3062,6 +3739,7 @@ function App() {
     <div className={`split-layout${glitchMode && !isMobile ? ' glitch-mode' : ''}`}>
       {glitchMode && !isMobile && <GlitchOverlay />}
       {glitchMode && !isMobile && <FrameFX />}
+      {glitchMode && !isMobile && <GlitchWaveform />}
       {/* LEFT PANEL */}
       <div className="left-panel" ref={leftPanelRef} onClick={glitchMode && !isMobile ? () => { initialLoadRef.current = false; setGlitchMode(false); setNameFallen(false); } : undefined}>
         <nav className="nav">
