@@ -6,19 +6,19 @@ const PI2 = Math.PI * 2;
 const { sin, cos, abs, floor, min, max, random, atan2, sqrt, pow } = Math;
 
 // Shared drawing helpers
-function setStyle(ctx, alpha = 0.5) {
+function setStyle(ctx, alpha = 0.7) {
   ctx.strokeStyle = `rgba(26,26,26,${alpha})`;
   ctx.fillStyle = `rgba(26,26,26,${alpha})`;
-  ctx.lineWidth = 0.5;
+  ctx.lineWidth = 0.75;
 }
 
-function label(ctx, text, x, y, size = 8, alpha = 0.4) {
+function label(ctx, text, x, y, size = 8, alpha = 0.6) {
   ctx.font = `${size}px 'ISO', monospace`;
   ctx.fillStyle = `rgba(26,26,26,${alpha})`;
   ctx.fillText(text, x, y);
 }
 
-function cornerBrackets(ctx, x, y, w, h, size = 6, alpha = 0.3) {
+function cornerBrackets(ctx, x, y, w, h, size = 6, alpha = 0.5) {
   setStyle(ctx, alpha);
   ctx.beginPath(); ctx.moveTo(x, y + size); ctx.lineTo(x, y); ctx.lineTo(x + size, y); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(x + w - size, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + size); ctx.stroke();
@@ -26,14 +26,14 @@ function cornerBrackets(ctx, x, y, w, h, size = 6, alpha = 0.3) {
   ctx.beginPath(); ctx.moveTo(x + w - size, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - size); ctx.stroke();
 }
 
-function dashedRect(ctx, x, y, w, h, alpha = 0.2) {
+function dashedRect(ctx, x, y, w, h, alpha = 0.4) {
   ctx.setLineDash([3, 3]);
   setStyle(ctx, alpha);
   ctx.strokeRect(x, y, w, h);
   ctx.setLineDash([]);
 }
 
-function crosshair(ctx, x, y, size = 10, alpha = 0.3) {
+function crosshair(ctx, x, y, size = 10, alpha = 0.5) {
   setStyle(ctx, alpha);
   ctx.beginPath();
   ctx.moveTo(x - size, y); ctx.lineTo(x - 3, y);
@@ -43,7 +43,7 @@ function crosshair(ctx, x, y, size = 10, alpha = 0.3) {
   ctx.stroke();
 }
 
-function tick(ctx, x, y, checked, text, alpha = 0.35) {
+function tick(ctx, x, y, checked, text, alpha = 0.55) {
   label(ctx, `${checked ? '☑' : '☐'} ${text}`, x, y, 7, alpha);
 }
 
@@ -330,7 +330,7 @@ function resolutionGrid(ctx, w, h, t, mx, my, state) {
     for (let dx = -2; dx <= 2; dx++) {
       const dist = sqrt(dx * dx + dy * dy);
       if (dist > 2.2) continue;
-      const alpha = max(0, 0.2 - dist * 0.06);
+      const alpha = max(0, 0.4 - dist * 0.1);
       const nx = cellX + dx * gridSize, ny = cellY + dy * gridSize;
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
       setStyle(ctx, alpha);
@@ -432,7 +432,7 @@ function exposureChecker(ctx, w, h, t, mx, my, state) {
     const stepW = (w * 0.6) / steps;
     const gray = floor((i / (steps - 1)) * 255);
     const isActive = i === activeStep;
-    ctx.fillStyle = `rgba(${gray},${gray},${gray},${isActive ? 0.5 : 0.3})`;
+    ctx.fillStyle = `rgba(${gray},${gray},${gray},${isActive ? 0.7 : 0.5})`;
     ctx.fillRect(x, rampY, stepW - 1, rampH);
     if (isActive) {
       cornerBrackets(ctx, x - 1, rampY - 1, stepW, rampH + 2, 4, 0.4);
@@ -784,7 +784,7 @@ function nodeGraph(ctx, w, h, t, mx, my, state) {
     ctx.moveTo(na.x * w, na.y * h);
     ctx.lineTo(nb.x * w, nb.y * h);
     ctx.stroke();
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 0.75;
 
     // Data pulse
     const pulse = (t * 0.5 + a * 0.3) % 1;
@@ -906,7 +906,7 @@ function transformGizmo(ctx, w, h, t, mx, my, state) {
   ctx.moveTo(cx + cos(rotAngle) * 45, cy + sin(rotAngle) * 45);
   ctx.lineTo(cx + cos(rotAngle) * 58, cy + sin(rotAngle) * 58);
   ctx.stroke();
-  ctx.lineWidth = 0.5;
+  ctx.lineWidth = 0.75;
 
   // Degree marks around ring
   for (let a = 0; a < PI2; a += PI2 / 36) {
@@ -972,7 +972,7 @@ function particleConfig(ctx, w, h, t, mx, my, state) {
     const speed = 15 + sin(i * 1.5) * 8;
     const px = ex + cos(angle) * age * speed;
     const py = ey + sin(angle) * age * speed + age * age * 3;
-    const alpha = max(0, 0.3 - age * 0.1);
+    const alpha = max(0, 0.5 - age * 0.15);
     const size = max(0.5, 2 - age * 0.6);
 
     setStyle(ctx, alpha);

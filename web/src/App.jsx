@@ -872,8 +872,8 @@ function FrameFX() {
     resize();
     window.addEventListener('resize', resize);
 
-    const ACCENT = '#c1440e';
-    const MID = '#888';
+    const ACCENT = '#7a2a08';
+    const MID = '#444';
     const FAINT = '#e0e0e0';
     const DARK = '#1a1a1a';
 
@@ -2184,17 +2184,30 @@ function GlitchOverlay() {
     // --- EFFECT SCHEDULER: staggered temporal variation ---
     // Each effect has independent on/off windows. Max ~2-3 concurrent.
     const effectSlots = {
-      videoDropout:   { active: false, nextToggle: 0, onMin: 3000, onMax: 8000,  offMin: 6000,  offMax: 15000 },
-      organicDisp:    { active: false, nextToggle: 0, onMin: 4000, onMax: 10000, offMin: 5000,  offMax: 12000 },
-      vertexTrails:   { active: false, nextToggle: 0, onMin: 2000, onMax: 6000,  offMin: 12000, offMax: 25000 },
-      lissajous:      { active: false, nextToggle: 0, onMin: 5000, onMax: 12000, offMin: 5000,  offMax: 12000 },
-      slitScan:       { active: false, nextToggle: 0, onMin: 4000, onMax: 10000, offMin: 5000,  offMax: 12000 },
-      feedbackMirror: { active: false, nextToggle: 0, onMin: 4000, onMax: 10000, offMin: 6000,  offMax: 15000 },
-      radialPulse:    { active: false, nextToggle: 0, onMin: 5000, onMax: 12000, offMin: 5000,  offMax: 12000 },
-      datamosh:       { active: false, nextToggle: 0, onMin: 4000, onMax: 10000, offMin: 5000,  offMax: 12000 },
-      blobTracking:   { active: false, nextToggle: 0, onMin: 5000, onMax: 12000, offMin: 6000,  offMax: 15000 },
-      asciiBlowout:   { active: false, nextToggle: 0, onMin: 4000, onMax: 10000, offMin: 5000,  offMax: 14000 },
+      videoDropout:   { active: false, nextToggle: 0, onMin: 3000, onMax: 8000,  offMin: 6000,  offMax: 15000, firing: false, fireUntil: 0 },
+      organicDisp:    { active: false, nextToggle: 0, onMin: 4000, onMax: 10000, offMin: 5000,  offMax: 12000, firing: false, fireUntil: 0 },
+      vertexTrails:   { active: false, nextToggle: 0, onMin: 2000, onMax: 6000,  offMin: 12000, offMax: 25000, firing: false, fireUntil: 0 },
+      lissajous:      { active: false, nextToggle: 0, onMin: 5000, onMax: 12000, offMin: 5000,  offMax: 12000, firing: false, fireUntil: 0 },
+      slitScan:       { active: false, nextToggle: 0, onMin: 4000, onMax: 10000, offMin: 5000,  offMax: 12000, firing: false, fireUntil: 0 },
+      feedbackMirror: { active: false, nextToggle: 0, onMin: 4000, onMax: 10000, offMin: 6000,  offMax: 15000, firing: false, fireUntil: 0 },
+      radialPulse:    { active: false, nextToggle: 0, onMin: 5000, onMax: 12000, offMin: 5000,  offMax: 12000, firing: false, fireUntil: 0 },
+      datamosh:       { active: false, nextToggle: 0, onMin: 4000, onMax: 10000, offMin: 5000,  offMax: 12000, firing: false, fireUntil: 0 },
+      blobTracking:   { active: false, nextToggle: 0, onMin: 5000, onMax: 12000, offMin: 6000,  offMax: 15000, firing: false, fireUntil: 0 },
+      asciiBlowout:   { active: false, nextToggle: 0, onMin: 4000, onMax: 10000, offMin: 5000,  offMax: 14000, firing: false, fireUntil: 0 },
+      bayerDither:    { active: false, nextToggle: 0, onMin: 3000, onMax: 8000,  offMin: 8000,  offMax: 18000, firing: false, fireUntil: 0 },
     };
+    // Helper: check if an effect should render this frame (sustain-based, not per-frame dice)
+    // When the dice roll succeeds, the effect stays on for sustainMin-sustainMax ms
+    function shouldFire(slot, chance, time, sustainMin, sustainMax) {
+      if (slot.firing && time < slot.fireUntil) return true;
+      if (slot.firing) { slot.firing = false; return false; }
+      if (Math.random() < chance) {
+        slot.firing = true;
+        slot.fireUntil = time + sustainMin + Math.random() * (sustainMax - sustainMin);
+        return true;
+      }
+      return false;
+    }
     const slotKeys = Object.keys(effectSlots);
     // Stagger initial activations so they don't all start together
     slotKeys.forEach((key, i) => {
@@ -2419,8 +2432,9 @@ function GlitchOverlay() {
       ctx.fillRect(0, 0, w, h);
       ctx.restore();
 
-      // Re-seed with organic particles — keep canvas alive
-      if (bassEnergy > 0.4 || Math.random() < 0.05) {
+      // Re-seed with organic particles — keep canvas alive (more aggressive when dither active)
+      const reseedChance = effectSlots.bayerDither.active ? 0.12 : 0.05;
+      if (bassEnergy > 0.4 || Math.random() < reseedChance) {
         ctx.save();
         ctx.globalAlpha = 0.2 + bassEnergy * 0.25;
         seedBase();
@@ -2448,7 +2462,7 @@ function GlitchOverlay() {
       ctx.restore();
 
       // Organic displacement — warp a region with bezier-driven offset
-      if (effectSlots.organicDisp.active && Math.random() < 0.04) {
+      if (effectSlots.organicDisp.active && shouldFire(effectSlots.organicDisp, 0.03, time, 800, 2500)) {
         const srcX = Math.floor(Math.random() * w * 0.6);
         const srcY = Math.floor(Math.random() * h * 0.6);
         const sw = 20 + Math.floor(Math.random() * 80);
@@ -2464,7 +2478,7 @@ function GlitchOverlay() {
       }
 
       // Vertex trails — audio-reactive flowing lines
-      if (effectSlots.vertexTrails.active && midEnergy > 0.35 && Math.random() < 0.4) {
+      if (effectSlots.vertexTrails.active && midEnergy > 0.35 && shouldFire(effectSlots.vertexTrails, 0.2, time, 1000, 3000)) {
         ctx.save();
         const invertedBlend = ['exclusion', 'difference'].includes(blendRef.current);
         ctx.globalAlpha = invertedBlend ? 0.25 + midEnergy * 0.2 : 0.06 + midEnergy * 0.08;
@@ -2491,29 +2505,31 @@ function GlitchOverlay() {
         ctx.restore();
       }
 
-      // --- FILM GRAIN / ANALOG NOISE ---
-      ctx.save();
-      const grainIntensity = 0.04 + bassEnergy * 0.06;
-      ctx.globalAlpha = grainIntensity;
-      const grainSize = 3;
-      for (let gy = 0; gy < h; gy += grainSize) {
-        for (let gx = 0; gx < w; gx += grainSize) {
-          const v = Math.floor(Math.random() * 40);
-          ctx.fillStyle = `rgb(${v},${v},${v})`;
-          ctx.fillRect(gx, gy, grainSize, grainSize);
+      // --- FILM GRAIN / ANALOG NOISE — sparse, audio-reactive bursts ---
+      if (Math.random() < 0.15 + bassEnergy * 0.15) {
+        ctx.save();
+        const grainIntensity = 0.03 + bassEnergy * 0.04;
+        ctx.globalAlpha = grainIntensity;
+        const grainSize = 3;
+        for (let gy = 0; gy < h; gy += grainSize) {
+          for (let gx = 0; gx < w; gx += grainSize) {
+            const v = Math.floor(Math.random() * 40);
+            ctx.fillStyle = `rgb(${v},${v},${v})`;
+            ctx.fillRect(gx, gy, grainSize, grainSize);
+          }
         }
+        ctx.restore();
       }
-      ctx.restore();
 
       // --- LISSAJOUS FIGURES — oscilloscope-style parametric curves ---
-      if (effectSlots.lissajous.active && Math.random() < 0.08 + midEnergy * 0.08) {
+      if (effectSlots.lissajous.active && shouldFire(effectSlots.lissajous, 0.06, time, 1500, 4000)) {
         ctx.save();
         const invertLiss = ['exclusion', 'difference'].includes(blendRef.current);
-        ctx.globalAlpha = invertLiss ? 0.3 : 0.08;
+        ctx.globalAlpha = invertLiss ? 0.25 : 0.06;
         const isAccentL = Math.random() < 0.15;
         ctx.strokeStyle = isAccentL
-          ? (invertLiss ? '#c1440e' : '#6b2408')
-          : (invertLiss ? '#d0d0d0' : '#1a1a1a');
+          ? (invertLiss ? '#8a2e08' : '#4a1906')
+          : (invertLiss ? '#999' : '#111');
         ctx.lineWidth = 0.5 + Math.random();
         const lcx = Math.random() * w;
         const lcy = Math.random() * h;
@@ -2534,7 +2550,7 @@ function GlitchOverlay() {
       }
 
       // --- SLIT-SCAN DISTORTION — time-stretch a horizontal band ---
-      if (effectSlots.slitScan.active && Math.random() < 0.06 + highEnergy * 0.06) {
+      if (effectSlots.slitScan.active && shouldFire(effectSlots.slitScan, 0.04, time, 1000, 3000)) {
         try {
           const slitY = Math.floor(Math.random() * h);
           const slitH = 1 + Math.floor(Math.random() * 4);
@@ -2550,7 +2566,7 @@ function GlitchOverlay() {
       }
 
       // --- FEEDBACK MIRROR — duplicate and flip a region ---
-      if (effectSlots.feedbackMirror.active && Math.random() < 0.05) {
+      if (effectSlots.feedbackMirror.active && shouldFire(effectSlots.feedbackMirror, 0.03, time, 1200, 3500)) {
         try {
           const mx = Math.floor(Math.random() * w * 0.4);
           const my = Math.floor(Math.random() * h * 0.4);
@@ -2577,16 +2593,16 @@ function GlitchOverlay() {
       }
 
       // --- RADIAL PULSE — concentric rings on bass hits ---
-      if (effectSlots.radialPulse.active && bassEnergy > 0.3 && Math.random() < 0.12) {
+      if (effectSlots.radialPulse.active && bassEnergy > 0.3 && shouldFire(effectSlots.radialPulse, 0.08, time, 1500, 4000)) {
         ctx.save();
         const invertRad = ['exclusion', 'difference'].includes(blendRef.current);
-        ctx.globalAlpha = invertRad ? 0.2 : 0.05;
+        ctx.globalAlpha = invertRad ? 0.15 : 0.04;
         const pcx = Math.random() * w;
         const pcy = Math.random() * h;
         const rings = 3 + Math.floor(Math.random() * 6);
         ctx.strokeStyle = Math.random() < 0.2
-          ? (invertRad ? '#c1440e' : '#4a1906')
-          : (invertRad ? '#b0b0b0' : '#1a1a1a');
+          ? (invertRad ? '#8a2e08' : '#3a1204')
+          : (invertRad ? '#999' : '#111');
         ctx.lineWidth = 0.5;
         for (let ri = 0; ri < rings; ri++) {
           const radius = 8 + ri * (8 + Math.random() * 15);
@@ -2598,7 +2614,7 @@ function GlitchOverlay() {
       }
 
       // --- DATAMOSH BLOCK SHIFT — offset rectangular chunks ---
-      if (effectSlots.datamosh.active && Math.random() < 0.06 + bassEnergy * 0.06) {
+      if (effectSlots.datamosh.active && shouldFire(effectSlots.datamosh, 0.04, time, 800, 2500)) {
         try {
           const numBlocks = 1 + Math.floor(Math.random() * 4);
           for (let bi = 0; bi < numBlocks; bi++) {
@@ -2618,7 +2634,7 @@ function GlitchOverlay() {
       }
 
       // --- BLOB TRACKING — contour outlines around bright regions ---
-      if (effectSlots.blobTracking.active && Math.random() < 0.06 + bassEnergy * 0.06) {
+      if (effectSlots.blobTracking.active && shouldFire(effectSlots.blobTracking, 0.04, time, 1000, 3000)) {
         try {
           const blobData = ctx.getImageData(0, 0, w, h);
           const bd = blobData.data;
@@ -2713,7 +2729,7 @@ function GlitchOverlay() {
       }
 
       // --- ASCII BLOWOUT — scatter text characters across canvas ---
-      if (effectSlots.asciiBlowout.active && Math.random() < 0.05 + highEnergy * 0.05) {
+      if (effectSlots.asciiBlowout.active && shouldFire(effectSlots.asciiBlowout, 0.04, time, 1000, 3000)) {
         ctx.save();
         const invertAscii = ['exclusion', 'difference'].includes(blendRef.current);
         const asciiWords = ['FAULT', 'ERR', 'NULL', 'VOID', 'DECAY', 'LOST', '////', '0x00', 'NaN',
@@ -2757,6 +2773,49 @@ function GlitchOverlay() {
           ctx.setTransform(1, 0, 0, 1, 0, 0);
         }
         ctx.restore();
+      }
+
+      // --- BAYER DITHER — ordered dithering like TouchDesigner Dither TOP ---
+      if (effectSlots.bayerDither.active && shouldFire(effectSlots.bayerDither, 0.08, time, 1500, 4000)) {
+        try {
+          const ditherData = ctx.getImageData(0, 0, w, h);
+          const dd = ditherData.data;
+          // 8x8 Bayer matrix (normalized to 0-63)
+          const bayer8 = [
+             0,32, 8,40, 2,34,10,42,
+            48,16,56,24,50,18,58,26,
+            12,44, 4,36,14,46, 6,38,
+            60,28,52,20,62,30,54,22,
+             3,35,11,43, 1,33, 9,41,
+            51,19,59,27,49,17,57,25,
+            15,47, 7,39,13,45, 5,37,
+            63,31,55,23,61,29,53,21,
+          ];
+          // Audio-reactive: bass pushes toward coarser quantization
+          const ditherScale = 0.6 + bassEnergy * 0.4;
+          const step = w > 400 ? 2 : 1;
+          for (let dy = 0; dy < h; dy += step) {
+            for (let dx = 0; dx < w; dx += step) {
+              const di = (dy * w + dx) * 4;
+              const lum = dd[di] * 0.299 + dd[di + 1] * 0.587 + dd[di + 2] * 0.114;
+              const threshold = (bayer8[(dy & 7) * 8 + (dx & 7)] / 63) * 255 * ditherScale;
+              // Preserve mid-tones: blend between dithered and original instead of hard crush
+              const dithered = lum > threshold ? Math.min(255, lum * 1.2) : lum * 0.35;
+              const val = lum * 0.3 + dithered * 0.7;
+              dd[di] = val; dd[di + 1] = val; dd[di + 2] = val;
+              if (step > 1) {
+                for (let sy = 0; sy < step && dy + sy < h; sy++) {
+                  for (let sx = 0; sx < step && dx + sx < w; sx++) {
+                    if (sy === 0 && sx === 0) continue;
+                    const si = ((dy + sy) * w + dx + sx) * 4;
+                    dd[si] = val; dd[si + 1] = val; dd[si + 2] = val;
+                  }
+                }
+              }
+            }
+          }
+          ctx.putImageData(ditherData, 0, 0);
+        } catch(e) {}
       }
 
       frameRef.current = requestAnimationFrame(animate);
