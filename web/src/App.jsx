@@ -710,7 +710,7 @@ function GlitchCenterName({ onExit }) {
 // GLITCH OVERLAY — datamosh / pixel sort destruction canvas
 // ========================
 
-const BLEND_MODES = ['exclusion', 'multiply', 'difference', 'hard-light', 'luminosity'];
+const BLEND_MODES = ['normal']; // temporarily disabled: ['exclusion', 'multiply', 'difference', 'hard-light', 'luminosity'];
 
 function SpectralPortrait() {
   const canvasRef = useRef(null);
@@ -2181,6 +2181,47 @@ function GlitchOverlay() {
     }
     seedBase();
 
+    // Preload portrait for dithered flash effect
+    const portraitImg = new Image();
+    portraitImg.crossOrigin = 'anonymous';
+    let portraitReady = false;
+    let portraitCanvas = null;
+    portraitImg.onload = () => {
+      // Pre-render dithered version to an offscreen canvas
+      const pc = document.createElement('canvas');
+      const maxH = h * 0.7;
+      const pScale = Math.min(1, maxH / portraitImg.height);
+      const pw = Math.floor(portraitImg.width * pScale);
+      const ph = Math.floor(portraitImg.height * pScale);
+      pc.width = pw;
+      pc.height = ph;
+      const pctx = pc.getContext('2d', { willReadFrequently: true });
+      pctx.drawImage(portraitImg, 0, 0, pw, ph);
+      const pid = pctx.getImageData(0, 0, pw, ph);
+      const pp = pid.data;
+      // Apply 8x8 Bayer dither
+      const bayer = [
+         0,32, 8,40, 2,34,10,42, 48,16,56,24,50,18,58,26,
+        12,44, 4,36,14,46, 6,38, 60,28,52,20,62,30,54,22,
+         3,35,11,43, 1,33, 9,41, 51,19,59,27,49,17,57,25,
+        15,47, 7,39,13,45, 5,37, 63,31,55,23,61,29,53,21,
+      ];
+      for (let i = 0; i < pp.length; i += 4) {
+        const px2 = (i / 4) % pw;
+        const py2 = Math.floor((i / 4) / pw);
+        const lum = pp[i] * 0.299 + pp[i + 1] * 0.587 + pp[i + 2] * 0.114;
+        const threshold = (bayer[(py2 & 7) * 8 + (px2 & 7)] / 63) * 255 * 0.7;
+        const val = lum > threshold ? Math.min(255, lum * 1.1) : lum * 0.25;
+        pp[i] = val; pp[i + 1] = val; pp[i + 2] = val;
+      }
+      pctx.putImageData(pid, 0, 0);
+      portraitCanvas = pc;
+      portraitReady = true;
+    };
+    portraitImg.src = '/images/portrait-glitch.jpg';
+    let nextPortraitFlash = 15000 + Math.random() * 20000; // first flash after 15-35s
+    let portraitFlashUntil = 0;
+
     // --- EFFECT SCHEDULER: staggered temporal variation ---
     // Each effect has independent on/off windows. Max ~2-3 concurrent.
     const effectSlots = {
@@ -2197,10 +2238,19 @@ function GlitchOverlay() {
       bayerDither:    { active: false, nextToggle: 0, onMin: 3000, onMax: 8000,  offMin: 8000,  offMax: 18000, firing: false, fireUntil: 0 },
     };
     // Helper: check if an effect should render this frame (sustain-based, not per-frame dice)
-    // When the dice roll succeeds, the effect stays on for sustainMin-sustainMax ms
+    // Global cap: only 1-2 effects visually firing at any time
+    const MAX_FIRING = 2;
+    function countFiring() {
+      return slotKeys.filter(k => effectSlots[k].firing && performance.now() < effectSlots[k].fireUntil).length;
+    }
     function shouldFire(slot, chance, time, sustainMin, sustainMax) {
+      // Already sustaining — keep going
       if (slot.firing && time < slot.fireUntil) return true;
+      // Sustain expired — stop
       if (slot.firing) { slot.firing = false; return false; }
+      // Too many already firing — skip
+      if (countFiring() >= MAX_FIRING) return false;
+      // Roll the dice
       if (Math.random() < chance) {
         slot.firing = true;
         slot.fireUntil = time + sustainMin + Math.random() * (sustainMax - sustainMin);
@@ -2223,8 +2273,8 @@ function GlitchOverlay() {
             // Turn off — schedule next activation
             slot.active = false;
             slot.nextToggle = time + slot.offMin + Math.random() * (slot.offMax - slot.offMin);
-          } else if (activeCount < 3 || Math.random() < 0.1) {
-            // Turn on — allow up to ~3 concurrent, rarely more
+          } else if (activeCount < 2 || Math.random() < 0.05) {
+            // Turn on — allow up to ~2 concurrent, rarely more
             slot.active = true;
             slot.nextToggle = time + slot.onMin + Math.random() * (slot.onMax - slot.onMin);
           } else {
@@ -2816,6 +2866,33 @@ function GlitchOverlay() {
           }
           ctx.putImageData(ditherData, 0, 0);
         } catch(e) {}
+      }
+
+      // --- DITHERED PORTRAIT FLASH — rare, ghostly appearance ---
+      if (portraitReady && portraitCanvas) {
+        if (time >= nextPortraitFlash && portraitFlashUntil === 0) {
+          // Start a flash: sustain for 1.5-3.5s
+          portraitFlashUntil = time + 1500 + Math.random() * 2000;
+        }
+        if (time < portraitFlashUntil) {
+          ctx.save();
+          // Fade in/out at edges of the flash window
+          const remaining = portraitFlashUntil - time;
+          const totalDur = portraitFlashUntil - nextPortraitFlash;
+          const elapsed2 = totalDur - remaining;
+          const fadeIn = Math.min(1, elapsed2 / 400);
+          const fadeOut = Math.min(1, remaining / 400);
+          ctx.globalAlpha = Math.min(fadeIn, fadeOut) * 0.35;
+          // Center the portrait on the canvas
+          const px = Math.floor((w - portraitCanvas.width) / 2);
+          const py = Math.floor((h - portraitCanvas.height) / 2);
+          ctx.drawImage(portraitCanvas, px, py);
+          ctx.restore();
+        } else if (portraitFlashUntil > 0 && time >= portraitFlashUntil) {
+          // Flash ended — schedule next one (20-50s from now)
+          portraitFlashUntil = 0;
+          nextPortraitFlash = time + 20000 + Math.random() * 30000;
+        }
       }
 
       frameRef.current = requestAnimationFrame(animate);
