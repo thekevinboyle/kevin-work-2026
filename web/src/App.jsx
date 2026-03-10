@@ -350,9 +350,12 @@ function DisengageButton({ onClick, projectId }) {
 // APP
 // ========================
 
+const initialViz = Math.floor(Math.random() * visualizations.length);
+
 function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [transitioning, setTransitioning] = useState(false);
+  const [vizIndex, setVizIndex] = useState(initialViz);
   const leftPanelRef = useRef(null);
 
   const selected = selectedId
@@ -539,7 +542,10 @@ function App() {
             <ProjectView project={selected} transitioning={transitioning} />
           </>
         ) : (
-          <VisualizationField />
+          <>
+            <CycleVizButton onClick={() => setVizIndex((i) => (i + 1) % visualizations.length)} index={vizIndex} />
+            <VisualizationField vizIndex={vizIndex} />
+          </>
         )}
       </div>
     </div>
@@ -547,12 +553,34 @@ function App() {
 }
 
 // ========================
-// VISUALIZATION FIELD — random generative effect on each page load
+// CYCLE VIZ BUTTON — rotates through visualizations
 // ========================
 
-const chosenViz = Math.floor(Math.random() * visualizations.length);
+function CycleVizButton({ onClick, index }) {
+  const total = visualizations.length;
+  const label = String(index + 1).padStart(2, '0') + '/' + String(total).padStart(2, '0');
 
-function VisualizationField() {
+  return (
+    <button className="viz-cycle" onClick={onClick} aria-label="Next visualization">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="0.75" strokeDasharray="2 2" />
+        <circle cx="16" cy="16" r="8" stroke="currentColor" strokeWidth="0.75" />
+        <path d="M16 6 A10 10 0 0 1 26 16" stroke="currentColor" strokeWidth="1" fill="none" />
+        <path d="M25 13 L26 16 L23 16" stroke="currentColor" strokeWidth="1" fill="none" />
+        <path d="M16 26 A10 10 0 0 1 6 16" stroke="currentColor" strokeWidth="1" fill="none" />
+        <path d="M7 19 L6 16 L9 16" stroke="currentColor" strokeWidth="1" fill="none" />
+        <circle cx="16" cy="16" r="1.5" fill="currentColor" />
+      </svg>
+      <span className="viz-cycle__label">{label}</span>
+    </button>
+  );
+}
+
+// ========================
+// VISUALIZATION FIELD
+// ========================
+
+function VisualizationField({ vizIndex }) {
   const canvasRef = useRef(null);
   const mouseRef = useRef({ x: 0.5, y: 0.5 });
   const frameRef = useRef(null);
@@ -562,7 +590,7 @@ function VisualizationField() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const viz = visualizations[chosenViz];
+    const viz = visualizations[vizIndex];
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
     const dpr = window.devicePixelRatio || 1;
@@ -606,7 +634,7 @@ function VisualizationField() {
       window.removeEventListener('resize', resize);
       canvas.parentElement?.removeEventListener('mousemove', handleMouseMove);
     };
-  }, []);
+  }, [vizIndex]);
 
   return <canvas ref={canvasRef} className="blob-field" />;
 }

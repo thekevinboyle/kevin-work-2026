@@ -490,6 +490,7 @@ a {
 /* ======================== */
 
 .right-panel {
+  position: relative;
   height: 100vh;
   overflow: hidden;
   padding: var(--pad);
@@ -527,6 +528,48 @@ a {
 
 .project-close:hover svg {
   transform: rotate(45deg);
+}
+
+.viz-cycle {
+  position: fixed;
+  top: 1rem;
+  right: var(--pad);
+  z-index: 20;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  transition: color 0.3s ease;
+}
+
+.viz-cycle:hover {
+  color: var(--accent);
+}
+
+.viz-cycle svg {
+  transition: transform 0.3s ease;
+}
+
+.viz-cycle:hover svg {
+  transform: rotate(90deg);
+}
+
+.viz-cycle__label {
+  font-family: var(--font);
+  font-size: 7px;
+  letter-spacing: 0.15em;
+  color: currentColor;
+  opacity: 0.5;
+  transition: opacity 0.3s ease;
+}
+
+.viz-cycle:hover .viz-cycle__label {
+  opacity: 1;
 }
 
 .project-close__label {
