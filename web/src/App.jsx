@@ -3269,7 +3269,7 @@ function ProjectView({ project, transitioning }) {
 // ========================
 
 function MaybePixelSort({ src, alt, className, delay }) {
-  return <PixelSortImage src={src} alt={alt} className={className} delay={delay} />;
+  return <DitherAsciiImage src={src} alt={alt} className={className} delay={delay} />;
 }
 
 // ========================
@@ -3433,6 +3433,124 @@ function pixelSort(ctx, original, w, h, intensity, noiseMap) {
   }
 
   ctx.putImageData(output, 0, 0);
+}
+
+// ========================
+// DITHER + ASCII IMAGE — dithered/ASCII default, reveals on hover
+// ========================
+
+const BAYER4 = [
+   0, 8, 2,10,
+  12, 4,14, 6,
+   3,11, 1, 9,
+  15, 7,13, 5,
+];
+
+const ASCII_RAMP = ' .:-=+*#%@';
+
+function DitherAsciiImage({ src, alt, className }) {
+  const containerRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [hovered, setHovered] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const dimsRef = useRef({ w: 0, h: 0 });
+
+  useEffect(() => {
+    setLoaded(false);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+
+    img.onload = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      const maxW = 500;
+      const scale = Math.min(1, maxW / img.width);
+      const w = Math.floor(img.width * scale);
+      const h = Math.floor(img.height * scale);
+      canvas.width = w;
+      canvas.height = h;
+      dimsRef.current = { w, h };
+
+      // Draw original to extract pixel data
+      ctx.drawImage(img, 0, 0, w, h);
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const pixels = imageData.data;
+
+      // Clear and draw dithered ASCII
+      ctx.fillStyle = '#f5f5f4';
+      ctx.fillRect(0, 0, w, h);
+
+      const cellSize = 6;
+      const cols = Math.ceil(w / cellSize);
+      const rows = Math.ceil(h / cellSize);
+
+      ctx.textBaseline = 'top';
+
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const px = col * cellSize;
+          const py = row * cellSize;
+
+          // Sample center pixel of cell
+          const sx = Math.min(Math.floor(px + cellSize / 2), w - 1);
+          const sy = Math.min(Math.floor(py + cellSize / 2), h - 1);
+          const idx = (sy * w + sx) * 4;
+          const lum = pixels[idx] * 0.299 + pixels[idx + 1] * 0.587 + pixels[idx + 2] * 0.114;
+          const lumNorm = lum / 255;
+
+          // Bayer dither threshold
+          const threshold = (BAYER4[(row & 3) * 4 + (col & 3)] / 15);
+
+          // Pick ASCII character based on dithered luminance
+          const dithered = lumNorm + (threshold - 0.5) * 0.4;
+          const charIdx = Math.max(0, Math.min(ASCII_RAMP.length - 1,
+            Math.floor((1 - dithered) * ASCII_RAMP.length)));
+          const ch = ASCII_RAMP[charIdx];
+
+          if (ch === ' ') continue;
+
+          // Darker characters for darker regions
+          const alpha = 0.3 + (1 - lumNorm) * 0.5;
+          ctx.fillStyle = `rgba(26,26,26,${alpha})`;
+          ctx.font = `${cellSize + 1}px 'ISO', monospace`;
+          ctx.fillText(ch, px, py);
+        }
+      }
+
+      setLoaded(true);
+    };
+
+    img.src = src;
+  }, [src]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="pixel-sort-container"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <canvas
+        ref={canvasRef}
+        className="pixel-sort-canvas"
+        style={{
+          opacity: loaded ? (hovered ? 0 : 1) : 0,
+          transition: 'opacity 0.5s ease',
+        }}
+      />
+      <img
+        src={src}
+        alt={alt}
+        className={className}
+        style={{
+          opacity: hovered ? 1 : 0,
+          transition: 'opacity 0.5s ease',
+        }}
+      />
+    </div>
+  );
 }
 
 export default App;
