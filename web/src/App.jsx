@@ -2826,8 +2826,11 @@ function App() {
   const initialLoadRef = useRef(true);
   const leftPanelRef = useRef(null);
 
-  // Auto-trigger glitch intro only on first visit this session
+  const isMobile = window.innerWidth <= 768;
+
+  // Auto-trigger glitch intro only on first visit this session (desktop only)
   useEffect(() => {
+    if (isMobile) return;
     if (sessionStorage.getItem('glitch-seen')) return;
     const timer = setTimeout(() => {
       setGlitchMode(true);
@@ -2920,13 +2923,13 @@ function App() {
   }, [selectedId]);
 
   return (
-    <div className={`split-layout${glitchMode ? ' glitch-mode' : ''}`}>
-      {glitchMode && <GlitchOverlay />}
-      {glitchMode && <FrameFX />}
+    <div className={`split-layout${glitchMode && !isMobile ? ' glitch-mode' : ''}`}>
+      {glitchMode && !isMobile && <GlitchOverlay />}
+      {glitchMode && !isMobile && <FrameFX />}
       {/* LEFT PANEL */}
-      <div className="left-panel" ref={leftPanelRef} onClick={glitchMode ? () => { initialLoadRef.current = false; setGlitchMode(false); setNameFallen(false); } : undefined}>
+      <div className="left-panel" ref={leftPanelRef} onClick={glitchMode && !isMobile ? () => { initialLoadRef.current = false; setGlitchMode(false); setNameFallen(false); } : undefined}>
         <nav className="nav">
-          <span className="nav__name" style={{ cursor: glitchMode ? 'default' : 'pointer' }} onClick={!glitchMode ? () => setGlitchMode(true) : undefined}>
+          <span className="nav__name" style={{ cursor: !isMobile && !glitchMode ? 'pointer' : 'default' }} onClick={!isMobile && !glitchMode ? () => setGlitchMode(true) : undefined}>
             <FallingName active={glitchMode} onAllFallen={() => setNameFallen(true)} />
           </span>
           <span className="nav__info">
@@ -3018,7 +3021,7 @@ function App() {
             <span>thekevinboyle@gmail.com</span>
           </div>
         </footer>
-        {glitchMode && nameFallen && <GlitchCenterName onExit={() => { initialLoadRef.current = false; setGlitchMode(false); setNameFallen(false); }} />}
+        {glitchMode && !isMobile && nameFallen && <GlitchCenterName onExit={() => { initialLoadRef.current = false; setGlitchMode(false); setNameFallen(false); }} />}
       </div>
 
       {/* RIGHT PANEL */}
