@@ -120,11 +120,10 @@ function FadeIn({ children, as: Tag = 'div', className = '', delay = 0 }) {
 
 const HERO_TEXT = 'Designing clear and purposeful digital experiences';
 
-function SuctionHeadline({ scrollRef }) {
+function SuctionHeadline({ scrollRef, glitchMode }) {
   const h1Ref = useRef(null);
   const spansRef = useRef([]);
   const frameRef = useRef(null);
-
   // Split text into words, each word into letter spans
   const words = HERO_TEXT.split(' ');
   let charIndex = 0;
@@ -159,7 +158,15 @@ function SuctionHeadline({ scrollRef }) {
     const h1 = h1Ref.current;
     const scrollEl = scrollRef.current;
     if (!h1 || !scrollEl) return;
-    if (window.innerWidth <= 768) return; // disable on mobile
+    if (window.innerWidth <= 768) return;
+
+    // In glitch mode, clear per-letter styles so the parent melt can control opacity/blur
+    if (glitchMode) {
+      spansRef.current.forEach(span => {
+        if (span) { span.style.transform = ''; span.style.opacity = ''; span.style.filter = ''; }
+      });
+      return;
+    }
 
     function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
@@ -169,7 +176,6 @@ function SuctionHeadline({ scrollRef }) {
 
       const navBottom = nav.getBoundingClientRect().bottom;
       const heroRect = h1.getBoundingClientRect();
-      // Start effect when h1 is still 150px below the nav bottom
       const earlyStart = 150;
       const scrollProgress = clamp((navBottom + earlyStart - heroRect.top) / (heroRect.height + earlyStart), 0, 1.2);
 
@@ -185,7 +191,7 @@ function SuctionHeadline({ scrollRef }) {
           span.style.opacity = '';
           span.style.filter = '';
         } else {
-          const eased = localProgress * localProgress; // ease-in curve
+          const eased = localProgress * localProgress;
           const ty = -eased * 52;
           const sy = 1 - eased * 0.6;
           const blur = eased * 6;
@@ -199,9 +205,8 @@ function SuctionHeadline({ scrollRef }) {
     }
 
     frameRef.current = requestAnimationFrame(update);
-
     return () => cancelAnimationFrame(frameRef.current);
-  }, [scrollRef, totalChars]);
+  }, [scrollRef, totalChars, glitchMode]);
 
   return (
     <h1 ref={h1Ref} className="hero-headline">
@@ -3758,7 +3763,7 @@ function App() {
         </nav>
 
         <div className="hero-section">
-          <SuctionHeadline scrollRef={leftPanelRef} />
+          <SuctionHeadline scrollRef={leftPanelRef} glitchMode={glitchMode && !isMobile} />
           <div className="hero-label">
             <span className="hero-label__title"><AccentMark index={0} />Selected Work</span>
             <span className="hero-label__years">2016 - Present Day</span>
