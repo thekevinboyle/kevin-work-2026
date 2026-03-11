@@ -170,7 +170,8 @@ function SuctionHeadline({ scrollRef, glitchMode }) {
 
     function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
-    function update() {
+    function update(time) {
+      const t = time * 0.001;
       const nav = h1.closest('.left-panel')?.querySelector('.nav');
       if (!nav) return;
 
@@ -186,11 +187,8 @@ function SuctionHeadline({ scrollRef, glitchMode }) {
         const threshold = i / totalChars;
         const localProgress = clamp((scrollProgress - threshold) / 0.12, 0, 1);
 
-        if (localProgress === 0) {
-          span.style.transform = '';
-          span.style.opacity = '';
-          span.style.filter = '';
-        } else {
+        if (localProgress > 0) {
+          // Scroll suction
           const eased = localProgress * localProgress;
           const ty = -eased * 52;
           const sy = 1 - eased * 0.6;
@@ -198,6 +196,10 @@ function SuctionHeadline({ scrollRef, glitchMode }) {
           span.style.transform = `translateY(${ty}px) scaleY(${sy})`;
           span.style.opacity = 1 - eased;
           span.style.filter = `blur(${blur}px)`;
+        } else {
+          span.style.transform = '';
+          span.style.opacity = '';
+          span.style.filter = '';
         }
       }
 
@@ -357,12 +359,14 @@ function DisengageButton({ onClick, projectId }) {
 
 const NAME_TEXT = 'Kevin Boyle';
 
-function FallingName({ active, onAllFallen }) {
+function FallingName({ active, onAllFallen, hovered }) {
   const spansRef = useRef([]);
   const physicsRef = useRef(null);
   const frameRef = useRef(null);
   const startTimeRef = useRef(null);
   const reportedRef = useRef(false);
+  const hoverFrameRef = useRef(null);
+  const hoverStartRef = useRef(null);
 
   useEffect(() => {
     if (!active) {
@@ -444,6 +448,51 @@ function FallingName({ active, onAllFallen }) {
     frameRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameRef.current);
   }, [active]);
+
+  // Hover dither pulse
+  useEffect(() => {
+    if (active || !hovered) {
+      cancelAnimationFrame(hoverFrameRef.current);
+      hoverStartRef.current = null;
+      spansRef.current.forEach(span => {
+        if (span) {
+          span.style.maskImage = ''; span.style.webkitMaskImage = '';
+          span.style.maskSize = ''; span.style.webkitMaskSize = '';
+        }
+      });
+      return;
+    }
+
+    const phases = NAME_TEXT.split('').map((_, i) => i * 0.7 + Math.random() * 0.5);
+
+    function animate(time) {
+      if (!hoverStartRef.current) hoverStartRef.current = time;
+      const t = (time - hoverStartRef.current) * 0.001;
+      // Ramp intensity in over 0.3s
+      const intensity = Math.min(t / 0.3, 1);
+
+      spansRef.current.forEach((span, i) => {
+        if (!span || span.textContent === '\u00A0') return;
+        const wave = Math.sin(t * 2.5 + phases[i]) * 0.5 + 0.5;
+        const dissolve = wave * 0.35 * intensity;
+        const dotRadius = (1 - dissolve * 2) * 50;
+        if (dissolve > 0.05) {
+          const mask = `radial-gradient(circle, black ${dotRadius}%, transparent ${dotRadius}%)`;
+          span.style.maskImage = mask;
+          span.style.webkitMaskImage = mask;
+          span.style.maskSize = '3px 3px';
+          span.style.webkitMaskSize = '3px 3px';
+        } else {
+          span.style.maskImage = ''; span.style.webkitMaskImage = '';
+          span.style.maskSize = ''; span.style.webkitMaskSize = '';
+        }
+      });
+      hoverFrameRef.current = requestAnimationFrame(animate);
+    }
+
+    hoverFrameRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(hoverFrameRef.current);
+  }, [active, hovered]);
 
   return NAME_TEXT.split('').map((ch, i) => (
     <span
@@ -3642,6 +3691,7 @@ function App() {
   const [vizIndex, setVizIndex] = useState(initialViz);
   const [glitchMode, setGlitchMode] = useState(false);
   const [nameFallen, setNameFallen] = useState(false);
+  const [nameHovered, setNameHovered] = useState(false);
   const initialLoadRef = useRef(true);
   const leftPanelRef = useRef(null);
 
@@ -3760,8 +3810,8 @@ function App() {
       {/* LEFT PANEL */}
       <div className="left-panel" ref={leftPanelRef} onClick={glitchMode && !isMobile ? () => { initialLoadRef.current = false; setGlitchMode(false); setNameFallen(false); } : undefined}>
         <nav className="nav">
-          <span className="nav__name" style={{ cursor: !isMobile && !glitchMode ? 'pointer' : 'default' }} onClick={!isMobile && !glitchMode ? () => setGlitchMode(true) : undefined}>
-            <FallingName active={glitchMode} onAllFallen={() => setNameFallen(true)} />
+          <span className="nav__name" style={{ cursor: !isMobile && !glitchMode ? 'pointer' : 'default' }} onClick={!isMobile && !glitchMode ? () => setGlitchMode(true) : undefined} onMouseEnter={() => !glitchMode && !isMobile && setNameHovered(true)} onMouseLeave={() => setNameHovered(false)}>
+            <FallingName active={glitchMode} onAllFallen={() => setNameFallen(true)} hovered={nameHovered} />
           </span>
           <span className="nav__info">
             <span>Design Engineer</span>
