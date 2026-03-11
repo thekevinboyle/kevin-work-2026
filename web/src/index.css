@@ -233,6 +233,35 @@ a {
   margin-bottom: 4rem;
 }
 
+.project-tabs {
+  display: flex;
+  gap: 1.25rem;
+  padding-bottom: 0.5rem;
+}
+
+.project-tab {
+  font-family: 'ISO', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  opacity: 0.4;
+  cursor: pointer;
+  padding-bottom: 4px;
+  border-bottom: 1px solid transparent;
+  transition: opacity 0.15s ease;
+}
+
+.project-tab:hover {
+  opacity: 0.6;
+}
+
+.project-tab--active {
+  opacity: 1;
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
 .project-row {
   display: grid;
   grid-template-columns: 36px auto 1fr auto;

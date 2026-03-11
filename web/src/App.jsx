@@ -3637,6 +3637,7 @@ const initialViz = Math.floor(Math.random() * visualizations.length);
 
 function App() {
   const [selectedId, setSelectedId] = useState(null);
+  const [projectFilter, setProjectFilter] = useState('all');
   const [transitioning, setTransitioning] = useState(false);
   const [vizIndex, setVizIndex] = useState(initialViz);
   const [glitchMode, setGlitchMode] = useState(false);
@@ -3661,9 +3662,20 @@ function App() {
   useGlitchMelt(glitchMode, leftPanelRef);
 
 
+  const filteredProjects = projectFilter === 'all'
+    ? allProjects
+    : allProjects.filter(p => projectFilter === 'professional' ? p.type === 'client' : p.type === 'personal');
+
   const selected = selectedId
     ? allProjects.find((p) => p.id === selectedId)
     : null;
+
+  // Clear selection if filtered tab doesn't include it
+  useEffect(() => {
+    if (selectedId && !filteredProjects.find(p => p.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [projectFilter]);
 
   // Suction scroll effect on all text elements approaching the nav
   useEffect(() => {
@@ -3771,7 +3783,18 @@ function App() {
         </div>
 
         <div className="project-index">
-          {allProjects.map((project) => (
+          <div className="project-tabs">
+            {['all', 'professional', 'personal'].map(tab => (
+              <span
+                key={tab}
+                className={`project-tab${projectFilter === tab ? ' project-tab--active' : ''}`}
+                onClick={() => setProjectFilter(tab)}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </span>
+            ))}
+          </div>
+          {filteredProjects.map((project) => (
             <div
               key={project.id}
               className={`project-row ${selectedId === project.id ? 'project-row--selected' : ''}`}
