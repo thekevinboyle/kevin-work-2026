@@ -661,6 +661,122 @@ function generateGridLayout() {
   return cells;
 }
 
+function CaptureTracker({ tracker }) {
+  const canvasRef = useRef(null);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const ac = (a) => `rgba(193,68,14,${a})`;
+    const fontFam = "'ISO', monospace";
+    const DURATION = 120;
+
+    function draw() {
+      ctx.clearRect(0, 0, w, h);
+      if (!tracker) return;
+
+      const { cropRect, cell, startTime } = tracker;
+      const elapsed = performance.now() - startTime;
+      const t = Math.min(1, elapsed / DURATION);
+
+      // Source box position (left panel, CSS pixels)
+      const sx = cropRect.x;
+      const sy = cropRect.y;
+      const sw = cropRect.w;
+      const sh = cropRect.h;
+
+      // Destination cell position (right panel)
+      // The grid is inset 16px inside .capture-grid-wrapper which fills .right-panel (right half)
+      const halfW = w / 2;
+      const gridEl = document.querySelector('.capture-grid');
+      let dx, dy, dw, dh;
+      if (gridEl) {
+        const gr = gridEl.getBoundingClientRect();
+        const colW = gr.width / GRID_COLS;
+        const rowH = gr.height / GRID_ROWS;
+        dx = gr.left + cell.col * colW;
+        dy = gr.top + cell.row * rowH;
+        dw = cell.cs * colW;
+        dh = cell.rs * rowH;
+      } else {
+        dx = halfW + 16 + (cell.col / GRID_COLS) * (halfW - 32);
+        dy = 16 + (cell.row / GRID_ROWS) * (h - 32);
+        dw = (cell.cs / GRID_COLS) * (halfW - 32);
+        dh = (cell.rs / GRID_ROWS) * (h - 32);
+      }
+
+      // Source box — corner ticks
+      ctx.strokeStyle = 'rgba(255, 60, 30, 0.9)';
+      ctx.lineWidth = 1.5;
+      const tk = 8;
+      // Top-left
+      ctx.beginPath(); ctx.moveTo(sx, sy + tk); ctx.lineTo(sx, sy); ctx.lineTo(sx + tk, sy); ctx.stroke();
+      // Top-right
+      ctx.beginPath(); ctx.moveTo(sx + sw - tk, sy); ctx.lineTo(sx + sw, sy); ctx.lineTo(sx + sw, sy + tk); ctx.stroke();
+      // Bottom-right
+      ctx.beginPath(); ctx.moveTo(sx + sw, sy + sh - tk); ctx.lineTo(sx + sw, sy + sh); ctx.lineTo(sx + sw - tk, sy + sh); ctx.stroke();
+      // Bottom-left
+      ctx.beginPath(); ctx.moveTo(sx + tk, sy + sh); ctx.lineTo(sx, sy + sh); ctx.lineTo(sx, sy + sh - tk); ctx.stroke();
+
+      // Label
+      ctx.font = `7px ${fontFam}`;
+      ctx.fillStyle = 'rgba(255, 60, 30, 0.8)';
+      ctx.textBaseline = 'bottom';
+      ctx.textAlign = 'left';
+      const coordLabel = `${String.fromCharCode(65 + cell.row)}${cell.col}`;
+      ctx.fillText(`SAMPLE ${coordLabel}`, sx, sy - 2);
+
+      // Connecting line — animate from source center to dest center
+      const fromX = sx + sw / 2;
+      const fromY = sy + sh / 2;
+      const toX = dx + dw / 2;
+      const toY = dy + dh / 2;
+      const curX = fromX + (toX - fromX) * t;
+      const curY = fromY + (toY - fromY) * t;
+
+      ctx.strokeStyle = 'rgba(255, 60, 30, 0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
+      ctx.lineTo(curX, curY);
+      ctx.stroke();
+
+      // Leading dot
+      ctx.fillStyle = 'rgba(255, 60, 30, 0.9)';
+      ctx.beginPath();
+      ctx.arc(curX, curY, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(draw);
+      }
+    }
+
+    draw();
+    if (tracker) rafRef.current = requestAnimationFrame(draw);
+
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [tracker]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 10000 }}
+    />
+  );
+}
+
 function CaptureFrameOverlay() {
   const canvasRef = useRef(null);
 
@@ -889,10 +1005,10 @@ function grabFromCanvases() {
           d[i + 2] = Math.min(255, (d[i + 2] * boost + offset) | 0);
         }
         cropCtx.putImageData(imgData, 0, 0);
-        return crop.toDataURL('image/jpeg', 0.8);
+        return { dataUrl: crop.toDataURL('image/jpeg', 0.8), cropRect: { x: cx, y: cy, w: cw, h: ch } };
       }
     } catch (e) {
-      return crop.toDataURL('image/jpeg', 0.8);
+      return { dataUrl: crop.toDataURL('image/jpeg', 0.8), cropRect: { x: cx, y: cy, w: cw, h: ch } };
     }
   }
   return null;
@@ -905,6 +1021,7 @@ function GlitchCaptureGrid() {
   const capturesRef = useRef([]);
   const timerRef = useRef(null);
   const fillTargetRef = useRef(0);
+  const [tracker, setTracker] = useState(null); // active tracking line
 
   // Generate layout at start of each cycle
   if (!layoutRef.current) {
@@ -934,10 +1051,20 @@ function GlitchCaptureGrid() {
           setPhase('display');
           return;
         }
-        const dataUrl = grabFromCanvases();
-        if (dataUrl) {
-          capturesRef.current.push(dataUrl);
-          setCaptureCount(capturesRef.current.length);
+        const result = grabFromCanvases();
+        if (result) {
+          const cellIndex = capturesRef.current.length;
+          const cell = layoutRef.current[cellIndex];
+          capturesRef.current.push(result.dataUrl);
+
+          // Start tracking line animation
+          setTracker({ cropRect: result.cropRect, cell, startTime: performance.now() });
+
+          // After line animation completes, place the clip and clear tracker
+          setTimeout(() => {
+            setCaptureCount(capturesRef.current.length);
+            setTracker(null);
+          }, 120);
         }
         scheduleCapture();
       }, delay);
@@ -1008,6 +1135,8 @@ function GlitchCaptureGrid() {
   const caps = capturesRef.current;
 
   return (
+    <>
+    <CaptureTracker tracker={tracker} />
     <div className={`capture-grid-wrapper${phase === 'dither' ? ' capture-grid--dither' : ''}${phase === 'invert' ? ' capture-grid--invert' : ''}${phase === 'strobe' ? ' capture-grid--strobe' : ''}${phase === 'dissolving' ? ' capture-grid--dissolving' : ''}`}>
       <svg width="0" height="0" style={{ position: 'absolute' }}>
         <defs>
@@ -1047,6 +1176,7 @@ function GlitchCaptureGrid() {
       ))}
       </div>
     </div>
+    </>
   );
 }
 
