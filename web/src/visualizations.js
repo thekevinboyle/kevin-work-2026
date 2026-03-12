@@ -103,6 +103,9 @@ function reticleTracker(ctx, w, h, t, mx, my, state) {
     ctx.beginPath(); ctx.moveTo(0, h * i / 4); ctx.lineTo(w, h * i / 4); ctx.stroke();
   }
 
+  // Sound zone — grid quadrant
+  state.soundZone = floor(mx * 4) + floor(my * 4) * 4;
+
   label(ctx, 'DENOISED™', w - 70, h - 12, 7, 0.2);
   label(ctx, `${floor(t % 60).toString().padStart(2, '0')}:${floor((t * 24) % 24).toString().padStart(2, '0')}`, 15, h - 12, 7, 0.25);
 }
@@ -146,6 +149,10 @@ function versionControl(ctx, w, h, t, mx, my, state) {
   cornerBrackets(ctx, previewX, previewY, w * 0.35, h * 0.2, 8, 0.2);
   label(ctx, 'IMAGE READY', previewX + 8, previewY + h * 0.1, 7, 0.25);
   label(ctx, 'VIDEO READY', previewX + 8, previewY + h * 0.1 + 12, 7, 0.25);
+
+  // Sound zone — hovered file item
+  const hoveredItem = floor(my * h / 14);
+  state.soundZone = mx < 0.5 ? hoveredItem : -1;
 
   // Bottom status
   label(ctx, `SD  ${(t * 0.1 % 1).toFixed(2)}`, x, h - 30, 7, 0.2);
@@ -201,6 +208,9 @@ function registrationMarks(ctx, w, h, t, mx, my, state) {
     ctx.beginPath(); ctx.arc(w - 20, 18, 2.5, 0, PI2); ctx.fill();
   }
   label(ctx, 'REC', w - 42, 22, 7, 0.3);
+
+  // Sound zone — quadrant
+  state.soundZone = floor(mx * 3) + floor(my * 3) * 3;
 }
 
 // 4. SIGNAL PROCESSING
@@ -256,6 +266,9 @@ function signalProcessing(ctx, w, h, t, mx, my, state) {
   label(ctx, `FREQ ${freqMod.toFixed(3)}  AMP ${ampMod.toFixed(2)}`, w * 0.05, h * 0.65 + 14, 7, 0.2);
 
   label(ctx, `${(t * 0.98).toFixed(2)}LABS  SP`, w * 0.05, h - 20, 7, 0.2);
+
+  // Sound zone — frequency band
+  state.soundZone = floor(mx * 10);
 }
 
 // 5. AI STATUS PANEL
@@ -306,6 +319,10 @@ function aiStatusPanel(ctx, w, h, t, mx, my, state) {
 
   label(ctx, 'NO BUG', cx - 10, h - 25, 7, 0.2);
   dashedRect(ctx, cx - 20, h - 33, 45, 14);
+
+  // Sound zone — hovered status item
+  const hoverIdx = floor((smy * h - h * 0.65) / 13);
+  state.soundZone = (smx < 0.6 && hoverIdx >= 0 && hoverIdx < items.length) ? hoverIdx : -1;
 }
 
 // 6. RESOLUTION GRID
@@ -356,6 +373,9 @@ function resolutionGrid(ctx, w, h, t, mx, my, state) {
   label(ctx, `GRID ${gridSize}px`, w / 2 - 18, h / 2 - 5, 7, 0.2);
   label(ctx, `[${floor(mx * w)}, ${floor(my * h)}]`, w / 2 - 20, h / 2 + 8, 7, 0.25);
   crosshair(ctx, mx * w, my * h, 12, 0.15);
+
+  // Sound zone — grid cell
+  state.soundZone = floor(mx * w / gridSize) + floor(my * h / gridSize) * 100;
 
   cornerBrackets(ctx, 8, 8, w - 16, h - 16, 10, 0.15);
   label(ctx, '@STUDIO', w - 55, h - 12, 7, 0.2);
@@ -413,6 +433,15 @@ function renderPipeline(ctx, w, h, t, mx, my, state) {
       ctx.stroke();
     }
   });
+
+  // Sound zone — hovered stage
+  let hoveredStage = -1;
+  stages.forEach((stage, i) => {
+    const sx = startX + (i % 3) * (stageW + 20);
+    const sy = startY + floor(i / 3) * 50;
+    if (mx * w > sx && mx * w < sx + stageW && my * h > sy && my * h < sy + stageH + 5) hoveredStage = i;
+  });
+  state.soundZone = hoveredStage;
 
   label(ctx, 'RENDER PIPELINE', startX, h * 0.75, 9, 0.3);
   label(ctx, `FRAME ${floor(t * 24)} / ∞`, startX, h * 0.75 + 14, 7, 0.2);
@@ -477,6 +506,9 @@ function exposureChecker(ctx, w, h, t, mx, my, state) {
       ctx.fillRect(x + 1, h * 0.75 + 1, 16, 16);
     }
   }
+
+  // Sound zone — active zone
+  state.soundZone = activeZone;
 }
 
 // 9. FOCUS PLANE
@@ -530,6 +562,9 @@ function focusPlane(ctx, w, h, t, mx, my, state) {
   label(ctx, 'DEPTH OF FIELD', dofX, dofY - 15, 7, 0.25);
 
   cornerBrackets(ctx, cx - 35, cy - 35, 70, 70, 8, 0.2);
+
+  // Sound zone — f-stop zone
+  state.soundZone = floor(smx * 8) + floor(smy * 8) * 8;
 }
 
 // 10. TIMECODE DISPLAY
@@ -581,6 +616,9 @@ function timecodeDisplay(ctx, w, h, t, mx, my, state) {
   ctx.beginPath(); ctx.moveTo(outX, h - 55); ctx.lineTo(outX, h - 45); ctx.stroke();
   label(ctx, 'IN', inX - 3, h - 60, 5, 0.15);
   label(ctx, 'OUT', outX - 5, h - 60, 5, 0.15);
+
+  // Sound zone — scrub frame
+  state.soundZone = scrubFrame;
 }
 
 // 11. MOTION VECTORS
@@ -625,6 +663,9 @@ function motionVectors(ctx, w, h, t, mx, my, state) {
   label(ctx, `VEL ${sqrt(velX * velX + velY * velY).toFixed(1)}`, 10, 28, 7, 0.2);
   label(ctx, `DIR ${(atan2(velY, velX) * 180 / Math.PI).toFixed(0)}°`, 10, 40, 7, 0.2);
   cornerBrackets(ctx, 5, 5, w - 10, h - 10, 8, 0.1);
+
+  // Sound zone — grid sector
+  state.soundZone = floor(smx * 5) + floor(smy * 5) * 5;
 }
 
 // 12. COLOR CHANNELS
@@ -676,6 +717,9 @@ function colorChannels(ctx, w, h, t, mx, my, state) {
   });
 
   label(ctx, `SAMPLE @ ${floor(mx * 1920)}px`, w * 0.13, h * 0.03, 7, 0.25);
+
+  // Sound zone — hovered channel + sample position
+  state.soundZone = floor(my * 4) * 10 + floor(mx * 10);
 }
 
 // 13. ASPECT RATIO OVERLAY
@@ -736,6 +780,9 @@ function aspectRatio(ctx, w, h, t, mx, my, state) {
   label(ctx, 'TITLE SAFE', (w - safeW) / 2 + 3, (h - safeH) / 2 - 3, 6, 0.12);
 
   label(ctx, 'ASPECT RATIO', 10, h - 12, 7, 0.25);
+
+  // Sound zone — active aspect ratio
+  state.soundZone = active;
 }
 
 // 14. NODE GRAPH
@@ -819,6 +866,9 @@ function nodeGraph(ctx, w, h, t, mx, my, state) {
   if (hoveredNode >= 0) {
     label(ctx, `SELECTED: ${nodes[hoveredNode].label}`, 10, 28, 7, 0.25);
   }
+
+  // Sound zone — hovered node
+  state.soundZone = hoveredNode;
 }
 
 // 15. SYSTEM DIAGNOSTICS
@@ -880,6 +930,10 @@ function systemDiagnostics(ctx, w, h, t, mx, my, state) {
     ctx.beginPath(); ctx.arc(w - 20, 18, 2, 0, PI2); ctx.fill();
   }
   label(ctx, 'ONLINE', w - 50, 22, 7, 0.25);
+
+  // Sound zone — hovered metric row
+  const hoveredMetric = floor((my * h - 33) / 22);
+  state.soundZone = (hoveredMetric >= 0 && hoveredMetric < metrics.length) ? hoveredMetric : -1;
 }
 
 // 16. TRANSFORM GIZMO
@@ -946,6 +1000,10 @@ function transformGizmo(ctx, w, h, t, mx, my, state) {
   label(ctx, `SCL  ${(1 + (smx - 0.5) * 0.5).toFixed(3)}`, 10, h - 9, 7, 0.25);
 
   cornerBrackets(ctx, cx - 35, cy - 35, 70, 70, 6, 0.12);
+
+  // Sound zone — angle sector (12 sectors)
+  const sector = floor(((rotAngle + Math.PI) / PI2) * 12);
+  state.soundZone = sector;
 }
 
 // 17. PARTICLE EMITTER CONFIG
@@ -1010,6 +1068,10 @@ function particleConfig(ctx, w, h, t, mx, my, state) {
 
   // Position label
   label(ctx, `POS ${floor(ex)}, ${floor(ey)}`, w * 0.65, h - 15, 6, 0.2);
+
+  // Sound zone — hovered param
+  const hoveredParam = floor((my * h - panelY - 7) / 12);
+  state.soundZone = (mx < 0.45 && hoveredParam >= 0 && hoveredParam < params.length) ? hoveredParam : floor(smx * 4) + floor(smy * 4) * 4 + 100;
 }
 
 // 18. AUDIO SPECTRUM
@@ -1070,6 +1132,9 @@ function audioSpectrum(ctx, w, h, t, mx, my, state) {
     setStyle(ctx, 0.04);
     ctx.beginPath(); ctx.moveTo(w * 0.09, y); ctx.lineTo(w * 0.9, y); ctx.stroke();
   }
+
+  // Sound zone — cursor frequency band
+  state.soundZone = cursorBar;
 }
 
 // 19. LAYER STACK
@@ -1133,6 +1198,9 @@ function layerStack(ctx, w, h, t, mx, my, state) {
     label(ctx, `PREVIEW: ${layers[hoveredLayer].name}`, w * 0.06, previewY - 5, 7, 0.25);
     cornerBrackets(ctx, w * 0.06, previewY, w * 0.3, h * 0.15, 6, 0.15);
   }
+
+  // Sound zone — hovered layer
+  state.soundZone = isInLayerArea ? hoveredLayer : -1;
 }
 
 // 20. MEASUREMENT TOOL
@@ -1201,6 +1269,9 @@ function measurementTool(ctx, w, h, t, mx, my, state) {
   label(ctx, `B: ${floor(bx)}, ${floor(by)}`, 90, h - 12, 6, 0.2);
 
   cornerBrackets(ctx, 5, 5, w - 10, h - 10, 8, 0.08);
+
+  // Sound zone — distance zone
+  state.soundZone = floor(dist / 30);
 }
 
 export const visualizations = [

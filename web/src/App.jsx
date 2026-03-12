@@ -3,6 +3,7 @@ import { projects, projectDetails } from './data/projects';
 import { experience } from './data/experience';
 import { capabilities } from './data/capabilities';
 import { visualizations } from './visualizations';
+import { SoundEngine } from './sound';
 
 // Build flat index sorted by year descending
 const allProjects = projects.map((p, i) => ({
@@ -335,7 +336,7 @@ function DisengageIcon5() {
 
 const DISENGAGE_ICONS = [DisengageIcon0, DisengageIcon1, DisengageIcon2, DisengageIcon3, DisengageIcon4, DisengageIcon5];
 
-function DisengageButton({ onClick, projectId }) {
+function DisengageButton({ onClick, onHover, projectId }) {
   const variant = useRef(Math.floor(Math.random() * DISENGAGE_ICONS.length)).current;
   const [idx, setIdx] = useState(variant);
 
@@ -346,7 +347,7 @@ function DisengageButton({ onClick, projectId }) {
   const Icon = DISENGAGE_ICONS[idx];
 
   return (
-    <button className="project-close" onClick={onClick} aria-label="Close project">
+    <button className="project-close" onClick={onClick} onMouseEnter={onHover} aria-label="Close project">
       <Icon />
       <span className="project-close__label">{DISENGAGE_LABELS[idx]}</span>
     </button>
@@ -3692,10 +3693,14 @@ function App() {
   const [glitchMode, setGlitchMode] = useState(false);
   const [nameFallen, setNameFallen] = useState(false);
   const [nameHovered, setNameHovered] = useState(false);
+  const [audioMuted, setAudioMuted] = useState(() => localStorage.getItem('audio-muted') === 'true');
   const initialLoadRef = useRef(true);
   const leftPanelRef = useRef(null);
 
   const isMobile = window.innerWidth <= 768;
+
+  // Keep sound engine in sync with current viz
+  useEffect(() => { SoundEngine.setVizIndex(vizIndex); }, [vizIndex]);
 
   // Auto-trigger glitch intro only on first visit this session (desktop only)
   useEffect(() => {
@@ -3920,12 +3925,13 @@ function App() {
       <div className="right-panel">
         {selected ? (
           <>
-            <DisengageButton onClick={() => setSelectedId(null)} projectId={selectedId} />
+            <DisengageButton onClick={() => { setSelectedId(null); SoundEngine.play(vizIndex, 'click'); }} onHover={() => SoundEngine.play(vizIndex, 'hover-button')} projectId={selectedId} />
             <ProjectView project={selected} transitioning={transitioning} />
           </>
         ) : (
           <>
-            <CycleVizButton onClick={() => setVizIndex((i) => (i + 1) % visualizations.length)} index={vizIndex} />
+            <AudioToggle muted={audioMuted} onToggle={() => { SoundEngine.init(); const next = !audioMuted; setAudioMuted(next); SoundEngine.setMute(next); }} />
+            <CycleVizButton onClick={() => { setVizIndex((i) => (i + 1) % visualizations.length); SoundEngine.play(vizIndex, 'click'); }} onHover={() => SoundEngine.play(vizIndex, 'hover-button')} index={vizIndex} />
             <VisualizationField vizIndex={vizIndex} />
           </>
         )}
@@ -3938,12 +3944,12 @@ function App() {
 // CYCLE VIZ BUTTON — rotates through visualizations
 // ========================
 
-function CycleVizButton({ onClick, index }) {
+function CycleVizButton({ onClick, onHover, index }) {
   const total = visualizations.length;
   const label = String(index + 1).padStart(2, '0') + '/' + String(total).padStart(2, '0');
 
   return (
-    <button className="viz-cycle" onClick={onClick} aria-label="Next visualization">
+    <button className="viz-cycle" onClick={onClick} onMouseEnter={onHover} aria-label="Next visualization">
       <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
         <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="0.75" strokeDasharray="2 2" />
         <circle cx="16" cy="16" r="8" stroke="currentColor" strokeWidth="0.75" />
@@ -3959,6 +3965,31 @@ function CycleVizButton({ onClick, index }) {
 }
 
 // ========================
+// AUDIO TOGGLE
+// ========================
+
+function AudioToggle({ muted, onToggle }) {
+  return (
+    <button className="audio-toggle" onClick={onToggle} aria-label={muted ? 'Unmute audio' : 'Mute audio'}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2 6h2.5L8 3v10L4.5 10H2V6z" stroke="currentColor" strokeWidth="0.75" fill="none" />
+        {muted ? (
+          <>
+            <line x1="11" y1="5" x2="15" y2="11" stroke="currentColor" strokeWidth="0.75" />
+            <line x1="15" y1="5" x2="11" y2="11" stroke="currentColor" strokeWidth="0.75" />
+          </>
+        ) : (
+          <>
+            <path d="M10.5 5.5C11.5 6.5 11.5 9.5 10.5 10.5" stroke="currentColor" strokeWidth="0.75" fill="none" />
+            <path d="M12.5 3.5C14.5 5.5 14.5 10.5 12.5 12.5" stroke="currentColor" strokeWidth="0.75" fill="none" />
+          </>
+        )}
+      </svg>
+    </button>
+  );
+}
+
+// ========================
 // VISUALIZATION FIELD
 // ========================
 
@@ -3967,6 +3998,7 @@ function VisualizationField({ vizIndex }) {
   const mouseRef = useRef({ x: 0.5, y: 0.5 });
   const frameRef = useRef(null);
   const stateRef = useRef({});
+  const lastZoneRef = useRef(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -3988,6 +4020,7 @@ function VisualizationField({ vizIndex }) {
       canvas.style.height = h + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       stateRef.current = {}; // reset state on resize
+      lastZoneRef.current = null;
     }
 
     resize();
@@ -3999,13 +4032,44 @@ function VisualizationField({ vizIndex }) {
       mouseRef.current.y = (e.clientY - rect.top) / rect.height;
     }
 
+    function handleMouseDown(e) {
+      if (e.button === 2) return; // right-click handled by contextmenu
+      SoundEngine.startRoll(vizIndex, 'click', mouseRef.current.x, mouseRef.current.y);
+    }
+
+    function handleMouseUp(e) {
+      if (e.button === 2) return;
+      SoundEngine.stopRoll();
+    }
+
+    function handleContextMenu(e) {
+      e.preventDefault();
+      SoundEngine.startRoll(vizIndex, 'rightclick', mouseRef.current.x, mouseRef.current.y);
+    }
+
+    function handleContextMenuUp(e) {
+      SoundEngine.stopRoll();
+    }
+
     canvas.parentElement.addEventListener('mousemove', handleMouseMove);
+    canvas.parentElement.addEventListener('mousedown', handleMouseDown);
+    canvas.parentElement.addEventListener('mouseup', handleMouseUp);
+    canvas.parentElement.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('mouseup', handleContextMenuUp);
 
     function animate(time) {
       const t = time * 0.001;
       const cw = canvas.width / dpr;
       const ch = canvas.height / dpr;
-      viz.render(ctx, cw, ch, t, mouseRef.current.x, mouseRef.current.y, stateRef.current);
+      const mx = mouseRef.current.x;
+      const my = mouseRef.current.y;
+      viz.render(ctx, cw, ch, t, mx, my, stateRef.current);
+      // Detect zone changes for sound triggers
+      const zone = stateRef.current.soundZone;
+      if (zone !== undefined && zone !== lastZoneRef.current) {
+        lastZoneRef.current = zone;
+        SoundEngine.play(vizIndex, 'mouseover', mx, my);
+      }
       frameRef.current = requestAnimationFrame(animate);
     }
 
@@ -4015,6 +4079,11 @@ function VisualizationField({ vizIndex }) {
       cancelAnimationFrame(frameRef.current);
       window.removeEventListener('resize', resize);
       canvas.parentElement?.removeEventListener('mousemove', handleMouseMove);
+      canvas.parentElement?.removeEventListener('mousedown', handleMouseDown);
+      canvas.parentElement?.removeEventListener('mouseup', handleMouseUp);
+      canvas.parentElement?.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('mouseup', handleContextMenuUp);
+      SoundEngine.stopRoll();
     };
   }, [vizIndex]);
 
@@ -4065,6 +4134,7 @@ function ProjectView({ project, transitioning }) {
               target="_blank"
               rel="noopener noreferrer"
               className="project-view__link"
+              onClick={() => SoundEngine.trigger('click')}
             >
               Visit Site &rarr;
             </a>
@@ -4075,6 +4145,7 @@ function ProjectView({ project, transitioning }) {
               target="_blank"
               rel="noopener noreferrer"
               className="project-view__link"
+              onClick={() => SoundEngine.trigger('click')}
             >
               Launch App &rarr;
             </a>
@@ -4362,7 +4433,7 @@ function DitherAsciiImage({ src, alt, className }) {
     <div
       ref={containerRef}
       className="pixel-sort-container"
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={() => { setHovered(true); SoundEngine.trigger('hover-image'); }}
       onMouseLeave={() => setHovered(false)}
     >
       <canvas

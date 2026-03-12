@@ -601,6 +601,24 @@ a {
   opacity: 1;
 }
 
+.audio-toggle {
+  position: fixed;
+  top: 1.15rem;
+  right: calc(var(--pad) + 44px);
+  z-index: 20;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.35;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+.audio-toggle:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
 .project-close__label {
   font-family: var(--font);
   font-size: 7px;
