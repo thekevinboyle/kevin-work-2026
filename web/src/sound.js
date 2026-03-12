@@ -882,7 +882,7 @@ function skrillexClap() {
 
   // Output bus for all clap layers
   const clapBus = ctx.createGain();
-  clapBus.gain.value = 0.55;
+  clapBus.gain.value = 0.3;
 
   // High-pass — lower cutoff lets more punch through
   const hp = ctx.createBiquadFilter();
@@ -1261,4 +1261,29 @@ function stopRoll() {
   rollCount = 0;
 }
 
-export const SoundEngine = { init, play, trigger, setVizIndex, setMute, isMuted, startRoll, stopRoll };
+// ========================
+// UI CLICK — subtle, non-percussive
+// ========================
+
+function uiClick() {
+  ensureContext();
+  if (muted) return;
+  const t = ctx.currentTime;
+
+  // Tiny sine pop — soft and quick
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(pick(1200, 1400, 1600), t);
+  osc.frequency.exponentialRampToValueAtTime(pick(600, 800), t + 0.015);
+
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(rr(0.06, 0.1), t);
+  env.gain.exponentialRampToValueAtTime(0.001, t + pick(0.03, 0.04, 0.05));
+
+  osc.connect(env);
+  env.connect(masterGain);
+  osc.start(t);
+  osc.stop(t + 0.06);
+}
+
+export const SoundEngine = { init, play, trigger, setVizIndex, setMute, isMuted, startRoll, stopRoll, uiClick };

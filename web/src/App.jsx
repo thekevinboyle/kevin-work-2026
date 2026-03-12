@@ -611,6 +611,445 @@ const GLITCH_RANDOM = [
   'MEMBRANE RUPTURE',
 ];
 
+// ========================
+// GLITCH CAPTURE GRID — surveillance screenshot gallery
+// ========================
+
+const CAPTURE_LABELS = [
+  ...GLITCH_RANDOM,
+  'SECTOR SCAN', 'FRAME LOCK', 'CAPTURE REF', 'REGION HOLD',
+  'FIELD SAMPLE', 'NODE EXTRACT', 'SIGNAL GRAB', 'ZONE CLIP',
+];
+
+const GRID_COLS = 8;
+const GRID_ROWS = 10;
+function generateGridLayout() {
+  const occupied = [];
+  for (let r = 0; r < GRID_ROWS; r++) occupied.push(new Array(GRID_COLS).fill(false));
+  const cells = [];
+
+  for (let r = 0; r < GRID_ROWS; r++) {
+    for (let c = 0; c < GRID_COLS; c++) {
+      if (occupied[r][c]) continue;
+      const options = [];
+      const trySpan = (cs, rs, w) => {
+        for (let dr = 0; dr < rs; dr++)
+          for (let dc = 0; dc < cs; dc++)
+            if (r + dr >= GRID_ROWS || c + dc >= GRID_COLS || occupied[r + dr][c + dc]) return;
+        options.push({ cs, rs, w });
+      };
+      trySpan(1, 1, 12);
+      trySpan(2, 1, 18);
+      trySpan(1, 2, 12);
+      trySpan(2, 2, 22);
+      trySpan(3, 2, 10);
+      trySpan(2, 3, 8);
+      trySpan(3, 3, 5);
+      if (!options.length) continue;
+
+      const total = options.reduce((s, o) => s + o.w, 0);
+      let roll = Math.random() * total;
+      let chosen = options[0];
+      for (const opt of options) { roll -= opt.w; if (roll <= 0) { chosen = opt; break; } }
+
+      for (let dr = 0; dr < chosen.rs; dr++)
+        for (let dc = 0; dc < chosen.cs; dc++)
+          occupied[r + dr][c + dc] = true;
+      cells.push({ col: c, row: r, cs: chosen.cs, rs: chosen.rs });
+    }
+  }
+  return cells;
+}
+
+function CaptureFrameOverlay() {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const parent = canvas.parentElement;
+    if (!parent) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = parent.clientWidth;
+    const h = parent.clientHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const ac = (a) => `rgba(193,68,14,${a})`;
+    const gc = (a) => `rgba(180,180,180,${a})`;
+    const fontFam = "'ISO', monospace";
+
+    // Inset margin — frame floats inside the panel
+    const m = 16;
+    const L = m, T = m, R = w - m, B = h - m;
+    const fw = R - L, fh = B - T;
+
+    // Outer border — thin
+    ctx.strokeStyle = ac(0.15);
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(L + 0.5, T + 0.5, fw - 1, fh - 1);
+
+    // Corner brackets — large L-shapes
+    const bk = 28;
+    ctx.strokeStyle = ac(0.45);
+    ctx.lineWidth = 1;
+    [[L, T, L + bk, T, L, T + bk], [R - bk, T, R, T, R, T + bk], [R, B - bk, R, B, R - bk, B], [L + bk, B, L, B, L, B - bk]].forEach(([x1, y1, cx, cy, x2, y2]) => {
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(cx, cy); ctx.lineTo(x2, y2); ctx.stroke();
+    });
+
+    // Secondary inner brackets — smaller
+    const bk2 = 12;
+    const ins = 6;
+    ctx.strokeStyle = ac(0.2);
+    ctx.lineWidth = 0.5;
+    [[L + ins, T + ins, L + ins + bk2, T + ins, L + ins, T + ins + bk2], [R - ins - bk2, T + ins, R - ins, T + ins, R - ins, T + ins + bk2],
+     [R - ins, B - ins - bk2, R - ins, B - ins, R - ins - bk2, B - ins], [L + ins + bk2, B - ins, L + ins, B - ins, L + ins, B - ins - bk2]].forEach(([x1, y1, cx, cy, x2, y2]) => {
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(cx, cy); ctx.lineTo(x2, y2); ctx.stroke();
+    });
+
+    // Tick marks along each edge
+    ctx.strokeStyle = ac(0.2);
+    ctx.lineWidth = 0.5;
+    const tickL = 5;
+    const tickS = 3;
+    for (let i = 1; i < GRID_COLS; i++) {
+      const x = L + (i / GRID_COLS) * fw;
+      const major = i % 2 === 0;
+      ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + (major ? tickL : tickS)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, B); ctx.lineTo(x, B - (major ? tickL : tickS)); ctx.stroke();
+    }
+    for (let i = 1; i < GRID_ROWS; i++) {
+      const y = T + (i / GRID_ROWS) * fh;
+      const major = i % 2 === 0;
+      ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + (major ? tickL : tickS), y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(R, y); ctx.lineTo(R - (major ? tickL : tickS), y); ctx.stroke();
+    }
+
+    // Crosshair indicators at mid-edges
+    ctx.strokeStyle = ac(0.3);
+    ctx.lineWidth = 0.5;
+    const ch = 6;
+    const mx = L + fw / 2, my = T + fh / 2;
+    [[mx, T], [mx, B], [L, my], [R, my]].forEach(([cx, cy]) => {
+      ctx.beginPath();
+      ctx.moveTo(cx - ch, cy); ctx.lineTo(cx + ch, cy);
+      ctx.moveTo(cx, cy - ch); ctx.lineTo(cx, cy + ch);
+      ctx.stroke();
+    });
+
+    // Small reticle circles at quarter positions
+    ctx.strokeStyle = gc(0.08);
+    ctx.lineWidth = 0.5;
+    [[L + fw * 0.25, T + fh * 0.25], [L + fw * 0.75, T + fh * 0.25], [L + fw * 0.75, T + fh * 0.75], [L + fw * 0.25, T + fh * 0.75]].forEach(([cx, cy]) => {
+      ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx - 2, cy); ctx.lineTo(cx + 2, cy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, cy - 2); ctx.lineTo(cx, cy + 2); ctx.stroke();
+    });
+
+    // Edge dashes — registration-mark style
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = ac(0.08);
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(L + bk + 4, T); ctx.lineTo(R - bk - 4, T);
+    ctx.moveTo(L + bk + 4, B); ctx.lineTo(R - bk - 4, B);
+    ctx.moveTo(L, T + bk + 4); ctx.lineTo(L, B - bk - 4);
+    ctx.moveTo(R, T + bk + 4); ctx.lineTo(R, B - bk - 4);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Technical labels
+    ctx.font = `5px ${fontFam}`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = ac(0.35);
+    ctx.fillText('CAPTURE GRID', L + bk + 4, T + 3);
+    ctx.textAlign = 'right';
+    ctx.fillText('ACTIVE', R - bk - 4, T + 3);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('SECTOR REF', R - bk - 4, B - 3);
+    ctx.textAlign = 'left';
+    ctx.fillText(`GRID ${GRID_COLS}\u00D7${GRID_ROWS}`, L + bk + 4, B - 3);
+
+    // Numbered edge markers
+    ctx.font = `4px ${fontFam}`;
+    ctx.fillStyle = gc(0.12);
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'center';
+    for (let i = 0; i < GRID_COLS; i++) {
+      ctx.fillText(String(i), L + (i + 0.5) / GRID_COLS * fw, T + tickL + 1);
+    }
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    for (let i = 0; i < GRID_ROWS; i++) {
+      ctx.fillText(String.fromCharCode(65 + i), L + tickL + 1, T + (i + 0.5) / GRID_ROWS * fh);
+    }
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}
+    />
+  );
+}
+
+// Reusable composite canvas — avoids allocation per capture
+let _compCanvas = null;
+let _compCtx = null;
+
+function grabFromCanvases() {
+  const allCanvases = Array.from(document.querySelectorAll('canvas'));
+  const halfW = window.innerWidth / 2;
+
+  const sources = allCanvases.filter(c => {
+    if (c.width === 0 || c.height === 0) return false;
+    if (parseFloat(c.style.opacity || '1') < 0.05) return false;
+    const r = c.getBoundingClientRect();
+    return r.left < halfW && r.width > 10 && r.height > 10;
+  });
+
+  if (!sources.length) return null;
+
+  const vw = Math.floor(halfW);
+  const vh = window.innerHeight;
+
+  if (!_compCanvas || _compCanvas.width !== vw || _compCanvas.height !== vh) {
+    _compCanvas = document.createElement('canvas');
+    _compCanvas.width = vw;
+    _compCanvas.height = vh;
+    _compCtx = _compCanvas.getContext('2d');
+  }
+  const ctx = _compCtx;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.clearRect(0, 0, vw, vh);
+
+  for (const src of sources) {
+    const r = src.getBoundingClientRect();
+
+    const dx = Math.max(0, Math.round(r.left));
+    const dy = Math.max(0, Math.round(r.top));
+    const dw = Math.min(Math.round(r.width), vw - dx);
+    const dh = Math.min(Math.round(r.height), vh - dy);
+    if (dw <= 0 || dh <= 0) continue;
+
+    const sw = src.width * (dw / r.width);
+    const sh = src.height * (dh / r.height);
+
+    try {
+      ctx.save();
+      // Use 'lighter' for all sources — dark/black pixels add nothing,
+      // bright pixels accumulate. Prevents opaque dark backgrounds on
+      // one canvas from overwriting bright content from another.
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(src, 0, 0, sw, sh, dx, dy, dw, dh);
+      ctx.restore();
+    } catch (e) {
+      ctx.restore();
+    }
+  }
+
+  // Try up to 4 crops to find one with visual content
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const maxW = Math.min(300, vw * 0.7);
+    const maxH = Math.min(250, vh * 0.6);
+    const cw = Math.floor(60 + Math.random() * (maxW - 60));
+    const ch = Math.floor(50 + Math.random() * (maxH - 50));
+    const cx = Math.floor(Math.random() * Math.max(1, vw - cw));
+    const cy = Math.floor(Math.random() * Math.max(1, vh - ch));
+
+    const crop = document.createElement('canvas');
+    crop.width = cw;
+    crop.height = ch;
+    const cropCtx = crop.getContext('2d');
+    cropCtx.drawImage(_compCanvas, cx, cy, cw, ch, 0, 0, cw, ch);
+
+    try {
+      const imgData = cropCtx.getImageData(0, 0, cw, ch);
+      const d = imgData.data;
+      let totalBright = 0;
+      let samples = 0;
+      for (let i = 0; i < d.length; i += 16) {
+        totalBright += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+        samples++;
+      }
+      const avgBright = totalBright / samples;
+      // If any content or last attempt, apply aggressive boost
+      if (avgBright > 2 || attempt === 3) {
+        const boost = avgBright < 15 ? 6 + (15 - avgBright) * 1.5 : avgBright < 40 ? 3.5 : 1.5;
+        const offset = avgBright < 10 ? 25 : avgBright < 25 ? 15 : 5;
+        for (let i = 0; i < d.length; i += 4) {
+          d[i]     = Math.min(255, (d[i] * boost + offset) | 0);
+          d[i + 1] = Math.min(255, (d[i + 1] * boost + offset) | 0);
+          d[i + 2] = Math.min(255, (d[i + 2] * boost + offset) | 0);
+        }
+        cropCtx.putImageData(imgData, 0, 0);
+        return crop.toDataURL('image/jpeg', 0.8);
+      }
+    } catch (e) {
+      return crop.toDataURL('image/jpeg', 0.8);
+    }
+  }
+  return null;
+}
+
+function GlitchCaptureGrid() {
+  const [phase, setPhase] = useState('capturing');
+  const [captureCount, setCaptureCount] = useState(0);
+  const layoutRef = useRef(null);
+  const capturesRef = useRef([]);
+  const timerRef = useRef(null);
+  const fillTargetRef = useRef(0);
+
+  // Generate layout at start of each cycle
+  if (!layoutRef.current) {
+    const cells = generateGridLayout();
+    layoutRef.current = cells.map(c => ({
+      ...c,
+      label: CAPTURE_LABELS[Math.floor(Math.random() * CAPTURE_LABELS.length)],
+    }));
+    capturesRef.current = [];
+    // 40% chance full fill, otherwise 30-70% of cells
+    fillTargetRef.current = Math.random() < 0.4
+      ? cells.length
+      : Math.floor(cells.length * (0.3 + Math.random() * 0.4));
+  }
+
+  // Capture loop
+  useEffect(() => {
+    if (phase !== 'capturing') return;
+    let mounted = true;
+    const target = fillTargetRef.current;
+
+    function scheduleCapture() {
+      const delay = 600 + Math.random() * 900;
+      timerRef.current = setTimeout(() => {
+        if (!mounted) return;
+        if (capturesRef.current.length >= target) {
+          setPhase('display');
+          return;
+        }
+        const dataUrl = grabFromCanvases();
+        if (dataUrl) {
+          capturesRef.current.push(dataUrl);
+          setCaptureCount(capturesRef.current.length);
+        }
+        scheduleCapture();
+      }, delay);
+    }
+
+    scheduleCapture();
+    return () => { mounted = false; if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [phase]);
+
+  // Display for 3s → dither
+  useEffect(() => {
+    if (phase !== 'display') return;
+    const t = setTimeout(() => setPhase('dither'), 3000);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  // Dither for 3s → invert
+  useEffect(() => {
+    if (phase !== 'dither') return;
+    const t = setTimeout(() => setPhase('invert'), 3000);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  // Invert for 1s → strobe
+  useEffect(() => {
+    if (phase !== 'invert') return;
+    const t = setTimeout(() => setPhase('strobe'), 1000);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  // Strobe for 5s → dissolve
+  useEffect(() => {
+    if (phase !== 'strobe') return;
+    const t = setTimeout(() => setPhase('dissolving'), 5000);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  // Dissolve for 2s → restart
+  useEffect(() => {
+    if (phase !== 'dissolving') return;
+    const t = setTimeout(() => {
+      layoutRef.current = null;
+      capturesRef.current = [];
+      setCaptureCount(0);
+      setPhase('capturing');
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  // Fade-in tracking
+  const [visible, setVisible] = useState(new Set());
+  useEffect(() => {
+    const newIdxs = [];
+    for (let i = 0; i < captureCount; i++) if (!visible.has(i)) newIdxs.push(i);
+    if (newIdxs.length) {
+      requestAnimationFrame(() => {
+        setVisible(prev => {
+          const next = new Set(prev);
+          newIdxs.forEach(i => next.add(i));
+          return next;
+        });
+      });
+    }
+    if (captureCount === 0 && visible.size > 0) setVisible(new Set());
+  }, [captureCount]);
+
+  const layout = layoutRef.current || [];
+  const caps = capturesRef.current;
+
+  return (
+    <div className={`capture-grid-wrapper${phase === 'dither' ? ' capture-grid--dither' : ''}${phase === 'invert' ? ' capture-grid--invert' : ''}${phase === 'strobe' ? ' capture-grid--strobe' : ''}${phase === 'dissolving' ? ' capture-grid--dissolving' : ''}`}>
+      <svg width="0" height="0" style={{ position: 'absolute' }}>
+        <defs>
+          <filter id="dither-filter" colorInterpolationFilters="sRGB">
+            <feImage href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAJklEQVQYV2M8cODAf3d3dwYGBgYGRjjDHcZgBDOQaEYkGsxAogEA1BkP/1FvDNIAAAAASUVORK5CYII=" x="0" y="0" width="8" height="8" result="bayer" />
+            <feTile in="bayer" result="pattern" />
+            <feColorMatrix in="SourceGraphic" type="saturate" values="0" result="gray" />
+            <feComponentTransfer in="gray" result="bright">
+              <feFuncR type="linear" slope="1.2" intercept="0.05" />
+              <feFuncG type="linear" slope="1.2" intercept="0.05" />
+              <feFuncB type="linear" slope="1.2" intercept="0.05" />
+            </feComponentTransfer>
+            <feBlend in="bright" in2="pattern" mode="difference" result="mixed" />
+            <feComponentTransfer in="mixed">
+              <feFuncR type="discrete" tableValues="0 0.35 0.7 1" />
+              <feFuncG type="discrete" tableValues="0 0.35 0.7 1" />
+              <feFuncB type="discrete" tableValues="0 0.35 0.7 1" />
+            </feComponentTransfer>
+          </filter>
+        </defs>
+      </svg>
+      <CaptureFrameOverlay />
+      <div className="capture-grid">
+      {layout.slice(0, captureCount).map((cell, i) => (
+        <div
+          key={i}
+          className={`capture-cell${visible.has(i) ? ' capture-cell--visible' : ''}${phase === 'dissolving' ? ' capture-cell--dissolving' : ''}`}
+          style={{
+            gridColumn: `${cell.col + 1} / span ${cell.cs}`,
+            gridRow: `${cell.row + 1} / span ${cell.rs}`,
+            transitionDelay: phase === 'dissolving' ? `${i * 30}ms` : '0ms',
+          }}
+        >
+          <img src={caps[i]} alt="" />
+          <span className="capture-cell__label">{cell.label}</span>
+        </div>
+      ))}
+      </div>
+    </div>
+  );
+}
+
 function GlitchCenterName({ onExit }) {
   const canvasRef = useRef(null);
   const frameRef = useRef(null);
@@ -3925,13 +4364,15 @@ function App() {
       <div className="right-panel">
         {selected ? (
           <>
-            <DisengageButton onClick={() => { setSelectedId(null); SoundEngine.play(vizIndex, 'click'); }} onHover={() => SoundEngine.play(vizIndex, 'hover-button')} projectId={selectedId} />
+            <DisengageButton onClick={() => { setSelectedId(null); SoundEngine.uiClick(); }} onHover={() => SoundEngine.play(vizIndex, 'hover-button')} projectId={selectedId} />
             <ProjectView project={selected} transitioning={transitioning} />
           </>
+        ) : glitchMode && !isMobile ? (
+          <GlitchCaptureGrid />
         ) : (
           <>
-            <AudioToggle muted={audioMuted} onToggle={() => { SoundEngine.init(); const next = !audioMuted; setAudioMuted(next); SoundEngine.setMute(next); }} />
-            <CycleVizButton onClick={() => { setVizIndex((i) => (i + 1) % visualizations.length); SoundEngine.play(vizIndex, 'click'); }} onHover={() => SoundEngine.play(vizIndex, 'hover-button')} index={vizIndex} />
+            <AudioToggle muted={audioMuted} onToggle={() => { SoundEngine.init(); const next = !audioMuted; setAudioMuted(next); SoundEngine.setMute(next); if (!next) SoundEngine.uiClick(); }} />
+            <CycleVizButton onClick={() => { setVizIndex((i) => (i + 1) % visualizations.length); SoundEngine.uiClick(); }} onHover={() => SoundEngine.play(vizIndex, 'hover-button')} index={vizIndex} />
             <VisualizationField vizIndex={vizIndex} />
           </>
         )}
@@ -4034,6 +4475,7 @@ function VisualizationField({ vizIndex }) {
 
     function handleMouseDown(e) {
       if (e.button === 2) return; // right-click handled by contextmenu
+      if (e.target !== canvas) return; // only fire on canvas, not UI buttons
       SoundEngine.startRoll(vizIndex, 'click', mouseRef.current.x, mouseRef.current.y);
     }
 
@@ -4044,6 +4486,7 @@ function VisualizationField({ vizIndex }) {
 
     function handleContextMenu(e) {
       e.preventDefault();
+      if (e.target !== canvas) return;
       SoundEngine.startRoll(vizIndex, 'rightclick', mouseRef.current.x, mouseRef.current.y);
     }
 

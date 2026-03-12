@@ -525,6 +525,10 @@ a {
   padding: var(--pad);
 }
 
+.right-panel:has(.capture-grid-wrapper) {
+  padding: 0;
+}
+
 .right-panel:has(.project-view) {
   overflow-y: auto;
   position: relative;
@@ -561,7 +565,7 @@ a {
 
 .viz-cycle {
   position: fixed;
-  top: 1rem;
+  bottom: 1rem;
   right: var(--pad);
   z-index: 20;
   background: none;
@@ -603,8 +607,8 @@ a {
 
 .audio-toggle {
   position: fixed;
-  top: 1.15rem;
-  right: calc(var(--pad) + 44px);
+  bottom: 1.55rem;
+  left: calc(50vw + var(--pad));
   z-index: 20;
   background: none;
   border: none;
@@ -858,6 +862,94 @@ a {
   0%, 85%, 100% { transform: translate(0); }
   90% { transform: translateX(4px); }
   95% { transform: translateX(-3px); }
+}
+
+/* ======================== */
+/* GLITCH CAPTURE GRID      */
+/* ======================== */
+
+.capture-grid-wrapper {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.capture-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(10, 1fr);
+  gap: 0;
+  position: absolute;
+  inset: 16px;
+  overflow: hidden;
+}
+
+.capture-cell {
+  position: relative;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  border: 0.5px solid rgba(193, 68, 14, 0.12);
+}
+
+.capture-cell--visible {
+  opacity: 1;
+}
+
+.capture-cell--dissolving {
+  opacity: 0;
+  filter: blur(3px);
+  transform: scale(0.97);
+  transition: opacity 1.2s ease, filter 1.2s ease, transform 1.2s ease;
+}
+
+/* Dither — SVG Bayer dither pattern */
+.capture-grid--dither .capture-cell img {
+  filter: url(#dither-filter);
+  opacity: 1;
+  transition: filter 1s ease-in;
+}
+
+/* Invert — smooth flip to negative */
+.capture-grid--invert .capture-cell img {
+  filter: saturate(0) contrast(1.6) brightness(1.3) invert(1);
+  opacity: 1;
+  transition: filter 0.6s ease;
+}
+
+/* Strobe — flickers inside each cell */
+.capture-grid--strobe .capture-cell img {
+  animation: captureStrobe 0.12s steps(2) infinite;
+  transition: none;
+}
+
+@keyframes captureStrobe {
+  0% { filter: saturate(0) contrast(1.6) brightness(1.3) invert(0); opacity: 0.85; }
+  50% { filter: saturate(0) contrast(2.5) brightness(1.5) invert(1); opacity: 1; }
+}
+
+.capture-cell img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0) contrast(1.6) brightness(1.3);
+  opacity: 0.85;
+  transition: filter 0.8s ease, opacity 0.6s ease;
+}
+
+.capture-cell__label {
+  position: absolute;
+  bottom: 12%;
+  left: 10%;
+  font-family: 'ISO', monospace;
+  font-size: 5px;
+  letter-spacing: 0.1em;
+  color: rgba(193, 68, 14, 0.5);
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* ======================== */
