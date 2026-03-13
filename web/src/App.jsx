@@ -623,11 +623,8 @@ const CAPTURE_LABELS = [
 
 const GRID_COLS = 8;
 const GRID_ROWS = 10;
-function generateGridLayout() {
-  const occupied = [];
-  for (let r = 0; r < GRID_ROWS; r++) occupied.push(new Array(GRID_COLS).fill(false));
-  const cells = [];
-
+// Place one piece at the next available bin-packed slot (top-left scan)
+function binPlace(occupied) {
   for (let r = 0; r < GRID_ROWS; r++) {
     for (let c = 0; c < GRID_COLS; c++) {
       if (occupied[r][c]) continue;
@@ -638,13 +635,7 @@ function generateGridLayout() {
             if (r + dr >= GRID_ROWS || c + dc >= GRID_COLS || occupied[r + dr][c + dc]) return;
         options.push({ cs, rs, w });
       };
-      trySpan(1, 1, 12);
-      trySpan(2, 1, 18);
-      trySpan(1, 2, 12);
-      trySpan(2, 2, 22);
-      trySpan(3, 2, 10);
-      trySpan(2, 3, 8);
-      trySpan(3, 3, 5);
+      for (const p of PIECES) trySpan(p.cs, p.rs, p.w);
       if (!options.length) continue;
 
       const total = options.reduce((s, o) => s + o.w, 0);
@@ -652,13 +643,94 @@ function generateGridLayout() {
       let chosen = options[0];
       for (const opt of options) { roll -= opt.w; if (roll <= 0) { chosen = opt; break; } }
 
+      // Calculate fallFrom before marking
+      let fallFrom = 0;
+      for (let scanR = r - 1; scanR >= 0; scanR--) {
+        let blocked = false;
+        for (let dc = 0; dc < chosen.cs; dc++) {
+          if (occupied[scanR][c + dc]) { blocked = true; break; }
+        }
+        if (blocked) { fallFrom = scanR + 1; break; }
+      }
+
       for (let dr = 0; dr < chosen.rs; dr++)
         for (let dc = 0; dc < chosen.cs; dc++)
           occupied[r + dr][c + dc] = true;
-      cells.push({ col: c, row: r, cs: chosen.cs, rs: chosen.rs });
+      return { col: c, row: r, cs: chosen.cs, rs: chosen.rs, fallFrom };
     }
   }
-  return cells;
+  return null;
+}
+
+// Rectangular piece sizes with weighted probability
+const PIECES = [
+  { cs: 1, rs: 1, w: 10 },
+  { cs: 2, rs: 1, w: 14 },
+  { cs: 3, rs: 1, w: 6 },
+  { cs: 4, rs: 1, w: 3 },
+  { cs: 1, rs: 2, w: 10 },
+  { cs: 2, rs: 2, w: 18 },
+  { cs: 3, rs: 2, w: 8 },
+  { cs: 4, rs: 2, w: 4 },
+  { cs: 1, rs: 3, w: 5 },
+  { cs: 2, rs: 3, w: 6 },
+  { cs: 3, rs: 3, w: 4 },
+  { cs: 1, rs: 4, w: 3 },
+  { cs: 4, rs: 3, w: 2 },
+  { cs: 3, rs: 4, w: 2 },
+];
+
+// Tetris-style: pick a random piece, random column, hard-drop to lowest valid row
+function tetrisDrop(occupied) {
+  // Shuffle piece order for variety
+  const shuffled = PIECES.slice().sort(() => Math.random() - 0.5);
+
+  for (const piece of shuffled) {
+    const { cs, rs } = piece;
+
+    // Shuffle columns for variety
+    const columns = [];
+    for (let c = 0; c <= GRID_COLS - cs; c++) columns.push(c);
+    for (let i = columns.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [columns[i], columns[j]] = [columns[j], columns[i]];
+    }
+
+    for (const col of columns) {
+      // Hard drop: spawn at row 0, fall straight down until blocked
+      let landRow = -1;
+      for (let r = 0; r <= GRID_ROWS - rs; r++) {
+        let fits = true;
+        for (let dr = 0; dr < rs && fits; dr++)
+          for (let dc = 0; dc < cs && fits; dc++)
+            if (occupied[r + dr][col + dc]) fits = false;
+        if (fits) {
+          landRow = r;
+        } else {
+          break; // hit obstruction, land at previous row
+        }
+      }
+      if (landRow < 0) continue;
+
+      // Calculate fallFrom BEFORE marking occupied
+      let fallFrom = 0;
+      for (let scanR = landRow - 1; scanR >= 0; scanR--) {
+        let blocked = false;
+        for (let dc = 0; dc < cs; dc++) {
+          if (occupied[scanR][col + dc]) { blocked = true; break; }
+        }
+        if (blocked) { fallFrom = scanR + 1; break; }
+      }
+
+      // Mark occupied
+      for (let dr = 0; dr < rs; dr++)
+        for (let dc = 0; dc < cs; dc++)
+          occupied[landRow + dr][col + dc] = true;
+
+      return { col, row: landRow, cs, rs, fallFrom };
+    }
+  }
+  return null;
 }
 
 function CaptureTracker({ tracker }) {
@@ -677,27 +749,23 @@ function CaptureTracker({ tracker }) {
     canvas.style.height = h + 'px';
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
 
-    const ac = (a) => `rgba(193,68,14,${a})`;
+    if (!tracker) return; // nothing to draw — canvas is cleared
+
     const fontFam = "'ISO', monospace";
-    const DURATION = 120;
+    const DURATION = 250;
+    let cancelled = false;
 
     function draw() {
+      if (cancelled) return;
       ctx.clearRect(0, 0, w, h);
-      if (!tracker) return;
 
       const { cropRect, cell, startTime } = tracker;
       const elapsed = performance.now() - startTime;
       const t = Math.min(1, elapsed / DURATION);
 
-      // Source box position (left panel, CSS pixels)
-      const sx = cropRect.x;
-      const sy = cropRect.y;
-      const sw = cropRect.w;
-      const sh = cropRect.h;
-
       // Destination cell position (right panel)
-      // The grid is inset 16px inside .capture-grid-wrapper which fills .right-panel (right half)
       const halfW = w / 2;
       const gridEl = document.querySelector('.capture-grid');
       let dx, dy, dw, dh;
@@ -716,8 +784,16 @@ function CaptureTracker({ tracker }) {
         dh = (cell.rs / GRID_ROWS) * (h - 32);
       }
 
-      // Source box — corner ticks
-      ctx.strokeStyle = 'rgba(255, 60, 30, 0.9)';
+      // Source box — same size as destination cell, centered on crop area
+      const cx = cropRect.x + cropRect.w / 2;
+      const cy = cropRect.y + cropRect.h / 2;
+      const sx = Math.max(0, Math.min(cx - dw / 2, halfW - dw));
+      const sy = Math.max(0, Math.min(cy - dh / 2, h - dh));
+      const sw = dw;
+      const sh = dh;
+
+      // Source box — corner ticks matching dest cell color
+      ctx.strokeStyle = 'rgba(193, 68, 14, 0.5)';
       ctx.lineWidth = 1.5;
       const tk = 8;
       // Top-left
@@ -731,7 +807,7 @@ function CaptureTracker({ tracker }) {
 
       // Label
       ctx.font = `7px ${fontFam}`;
-      ctx.fillStyle = 'rgba(255, 60, 30, 0.8)';
+      ctx.fillStyle = 'rgba(193, 68, 14, 0.5)';
       ctx.textBaseline = 'bottom';
       ctx.textAlign = 'left';
       const coordLabel = `${String.fromCharCode(65 + cell.row)}${cell.col}`;
@@ -745,7 +821,7 @@ function CaptureTracker({ tracker }) {
       const curX = fromX + (toX - fromX) * t;
       const curY = fromY + (toY - fromY) * t;
 
-      ctx.strokeStyle = 'rgba(255, 60, 30, 0.7)';
+      ctx.strokeStyle = 'rgba(193, 68, 14, 0.4)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(fromX, fromY);
@@ -753,20 +829,20 @@ function CaptureTracker({ tracker }) {
       ctx.stroke();
 
       // Leading dot
-      ctx.fillStyle = 'rgba(255, 60, 30, 0.9)';
+      ctx.fillStyle = 'rgba(193, 68, 14, 0.6)';
       ctx.beginPath();
       ctx.arc(curX, curY, 3, 0, Math.PI * 2);
       ctx.fill();
 
-      if (t < 1) {
-        rafRef.current = requestAnimationFrame(draw);
-      }
+      rafRef.current = requestAnimationFrame(draw);
     }
 
     draw();
-    if (tracker) rafRef.current = requestAnimationFrame(draw);
 
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+    return () => {
+      cancelled = true;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, [tracker]);
 
   return (
@@ -1014,28 +1090,83 @@ function grabFromCanvases() {
   return null;
 }
 
-function GlitchCaptureGrid() {
+function GlitchCaptureGrid({ jogIndex, jogEnlarged, jogZoom, onJogData, resetSignal, onResetDone }) {
   const [phase, setPhase] = useState('capturing');
   const [captureCount, setCaptureCount] = useState(0);
   const layoutRef = useRef(null);
   const capturesRef = useRef([]);
   const timerRef = useRef(null);
   const fillTargetRef = useRef(0);
-  const [tracker, setTracker] = useState(null); // active tracking line
+  const tetrisGridRef = useRef(null);
+  const modeRef = useRef(null); // 'bin' | 'bin-drop' | 'tetris'
+  const [tracker, setTracker] = useState(null);
+  const [dropping, setDropping] = useState(new Map());
+  const [landed, setLanded] = useState(new Set());
+  const [gridFx, setGridFx] = useState('');
+  const [dissolving, setDissolving] = useState(new Set());
+  const lastResetRef = useRef(0);
+
+  // Transition sequence: dither → strobe → invert → dissolve → reset
+  useEffect(() => {
+    if (!resetSignal || resetSignal <= lastResetRef.current) return;
+    lastResetRef.current = resetSignal;
+    // Stop capturing
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setPhase('display');
+
+    const seq = [
+      { fx: 'dither', delay: 0 },
+      { fx: 'strobe', delay: 800 },
+      { fx: 'invert', delay: 1400 },
+      { fx: '', delay: 2000 },
+    ];
+    const timers = [];
+    seq.forEach(({ fx, delay }) => {
+      timers.push(setTimeout(() => setGridFx(fx), delay));
+    });
+    // Dissolve individual cells
+    timers.push(setTimeout(() => {
+      const count = capturesRef.current.length;
+      for (let i = 0; i < count; i++) {
+        timers.push(setTimeout(() => {
+          setDissolving(prev => new Set(prev).add(i));
+        }, i * 40));
+      }
+      // After all dissolved, signal parent to remount
+      timers.push(setTimeout(() => {
+        if (onResetDone) onResetDone();
+      }, count * 40 + 1200));
+    }, 2200));
+
+    return () => timers.forEach(t => clearTimeout(t));
+  }, [resetSignal]);
 
   // Generate layout at start of each cycle
   if (!layoutRef.current) {
-    const cells = generateGridLayout();
-    layoutRef.current = cells.map(c => ({
-      ...c,
-      label: CAPTURE_LABELS[Math.floor(Math.random() * CAPTURE_LABELS.length)],
-    }));
+    // Roll mode: 35% bin, 35% bin+drop, 30% tetris
+    const roll = Math.random();
+    if (roll < 0.35) {
+      modeRef.current = 'bin';
+    } else if (roll < 0.70) {
+      modeRef.current = 'bin-drop';
+    } else {
+      modeRef.current = 'tetris';
+    }
+
+    // All modes: empty grid, cells placed one at a time
+    tetrisGridRef.current = [];
+    for (let r = 0; r < GRID_ROWS; r++) tetrisGridRef.current.push(new Array(GRID_COLS).fill(false));
+    layoutRef.current = [];
     capturesRef.current = [];
-    // 40% chance full fill, otherwise 30-70% of cells
     fillTargetRef.current = Math.random() < 0.4
-      ? cells.length
-      : Math.floor(cells.length * (0.3 + Math.random() * 0.4));
+      ? GRID_COLS * GRID_ROWS
+      : Math.floor(GRID_COLS * GRID_ROWS * (0.3 + Math.random() * 0.4));
   }
+
+  // Clear tracker when leaving capture phase
+  useEffect(() => {
+    if (phase !== 'capturing') setTracker(null);
+  }, [phase]);
 
   // Capture loop
   useEffect(() => {
@@ -1048,23 +1179,45 @@ function GlitchCaptureGrid() {
       timerRef.current = setTimeout(() => {
         if (!mounted) return;
         if (capturesRef.current.length >= target) {
+          setTracker(null);
           setPhase('display');
           return;
         }
         const result = grabFromCanvases();
         if (result) {
-          const cellIndex = capturesRef.current.length;
-          const cell = layoutRef.current[cellIndex];
+          let cell;
+          const mode = modeRef.current;
+          const grid = tetrisGridRef.current;
+
+          if (mode === 'tetris') {
+            // All pieces gravity-drop
+            cell = tetrisDrop(grid);
+          } else if (mode === 'bin-drop') {
+            // All pieces bin-place, fall animation via fallFrom
+            cell = binPlace(grid);
+          } else {
+            // Bin mode: 30% chance a piece gravity-drops instead of bin-placing
+            if (Math.random() < 0.3) {
+              cell = tetrisDrop(grid);
+            } else {
+              cell = binPlace(grid);
+              if (cell) delete cell.fallFrom; // no fall animation for bin-placed pieces
+            }
+          }
+
+          if (!cell) { setTracker(null); setPhase('display'); return; }
+          cell.label = CAPTURE_LABELS[Math.floor(Math.random() * CAPTURE_LABELS.length)];
+          layoutRef.current.push(cell);
           capturesRef.current.push(result.dataUrl);
 
           // Start tracking line animation
           setTracker({ cropRect: result.cropRect, cell, startTime: performance.now() });
 
-          // After line animation completes, place the clip and clear tracker
+          // After line animation + hold, place the clip and clear tracker
           setTimeout(() => {
             setCaptureCount(capturesRef.current.length);
             setTracker(null);
-          }, 120);
+          }, 500);
         }
         scheduleCapture();
       }, delay);
@@ -1074,61 +1227,69 @@ function GlitchCaptureGrid() {
     return () => { mounted = false; if (timerRef.current) clearTimeout(timerRef.current); };
   }, [phase]);
 
-  // Display for 3s → dither
+  // Grid freezes on display — clear tracker
   useEffect(() => {
     if (phase !== 'display') return;
-    const t = setTimeout(() => setPhase('dither'), 3000);
-    return () => clearTimeout(t);
+    setTracker(null);
   }, [phase]);
 
-  // Dither for 3s → invert
-  useEffect(() => {
-    if (phase !== 'dither') return;
-    const t = setTimeout(() => setPhase('invert'), 3000);
-    return () => clearTimeout(t);
-  }, [phase]);
-
-  // Invert for 1s → strobe
-  useEffect(() => {
-    if (phase !== 'invert') return;
-    const t = setTimeout(() => setPhase('strobe'), 1000);
-    return () => clearTimeout(t);
-  }, [phase]);
-
-  // Strobe for 5s → dissolve
-  useEffect(() => {
-    if (phase !== 'strobe') return;
-    const t = setTimeout(() => setPhase('dissolving'), 5000);
-    return () => clearTimeout(t);
-  }, [phase]);
-
-  // Dissolve for 2s → restart
-  useEffect(() => {
-    if (phase !== 'dissolving') return;
-    const t = setTimeout(() => {
-      layoutRef.current = null;
-      capturesRef.current = [];
-      setCaptureCount(0);
-      setPhase('capturing');
-    }, 2000);
-    return () => clearTimeout(t);
-  }, [phase]);
-
-  // Fade-in tracking
+  // Fade-in + drop tracking
   const [visible, setVisible] = useState(new Set());
   useEffect(() => {
     const newIdxs = [];
     for (let i = 0; i < captureCount; i++) if (!visible.has(i)) newIdxs.push(i);
     if (newIdxs.length) {
-      requestAnimationFrame(() => {
-        setVisible(prev => {
-          const next = new Set(prev);
-          newIdxs.forEach(i => next.add(i));
+      // Split new cells into those that drop (have fallFrom) and those that fade in
+      const dropIdxs = newIdxs.filter(i => {
+        const cell = layoutRef.current?.[i];
+        return cell && cell.fallFrom !== undefined;
+      });
+      const fadeIdxs = newIdxs.filter(i => !dropIdxs.includes(i));
+
+      if (dropIdxs.length) {
+        setDropping(prev => {
+          const next = new Map(prev);
+          dropIdxs.forEach(i => {
+            const cell = layoutRef.current?.[i];
+            if (cell) next.set(i, cell.row);
+          });
           return next;
         });
-      });
+        setVisible(prev => {
+          const next = new Set(prev);
+          dropIdxs.forEach(i => next.add(i));
+          return next;
+        });
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setLanded(prev => {
+              const next = new Set(prev);
+              dropIdxs.forEach(i => next.add(i));
+              return next;
+            });
+          });
+        });
+      }
+      if (fadeIdxs.length) {
+        requestAnimationFrame(() => {
+          setVisible(prev => {
+            const next = new Set(prev);
+            fadeIdxs.forEach(i => next.add(i));
+            return next;
+          });
+        });
+      }
     }
-    if (captureCount === 0 && visible.size > 0) setVisible(new Set());
+    if (captureCount === 0 && visible.size > 0) {
+      setVisible(new Set());
+      setDropping(new Map());
+      setLanded(new Set());
+    }
+  }, [captureCount]);
+
+  // Report capture data to parent for jogwheel
+  useEffect(() => {
+    if (onJogData) onJogData({ count: captureCount, captures: capturesRef.current, layout: layoutRef.current });
   }, [captureCount]);
 
   const layout = layoutRef.current || [];
@@ -1137,7 +1298,7 @@ function GlitchCaptureGrid() {
   return (
     <>
     <CaptureTracker tracker={tracker} />
-    <div className={`capture-grid-wrapper${phase === 'dither' ? ' capture-grid--dither' : ''}${phase === 'invert' ? ' capture-grid--invert' : ''}${phase === 'strobe' ? ' capture-grid--strobe' : ''}${phase === 'dissolving' ? ' capture-grid--dissolving' : ''}`}>
+    <div className="capture-grid-wrapper">
       <svg width="0" height="0" style={{ position: 'absolute' }}>
         <defs>
           <filter id="dither-filter" colorInterpolationFilters="sRGB">
@@ -1159,25 +1320,778 @@ function GlitchCaptureGrid() {
         </defs>
       </svg>
       <CaptureFrameOverlay />
-      <div className="capture-grid">
-      {layout.slice(0, captureCount).map((cell, i) => (
+      <div className={`capture-grid${gridFx ? ` capture-grid--${gridFx}` : ''}`}>
+      {layout.slice(0, captureCount).map((cell, i) => {
+        const isDrop = dropping.has(i) && !landed.has(i);
+        const isLanded = landed.has(i);
+        const fallRows = cell.row - (cell.fallFrom || 0);
+        const dropOffset = dropping.has(i) ? (fallRows / cell.rs) * 100 : 0;
+        const isJogSelected = jogIndex === i && phase !== 'dissolving';
+        const isDiss = dissolving.has(i);
+        const dropClass = `${visible.has(i) ? ' capture-cell--visible' : ''}${isDrop ? ' capture-cell--dropping' : ''}${isLanded ? ' capture-cell--landed' : ''}${isJogSelected ? ' capture-cell--jog-selected' : ''}${isDiss ? ' capture-cell--dissolving' : ''}`;
+        const dropStyle = {
+          ...(isDrop ? { transform: `translateY(-${dropOffset}%)` } : {}),
+          ...(isLanded ? { '--drop-duration': `${0.15 + fallRows * 0.04}s` } : {}),
+        };
+
+        return (
         <div
           key={i}
-          className={`capture-cell${visible.has(i) ? ' capture-cell--visible' : ''}${phase === 'dissolving' ? ' capture-cell--dissolving' : ''}`}
+          className={`capture-cell${dropClass}`}
           style={{
             gridColumn: `${cell.col + 1} / span ${cell.cs}`,
             gridRow: `${cell.row + 1} / span ${cell.rs}`,
-            transitionDelay: phase === 'dissolving' ? `${i * 30}ms` : '0ms',
+            ...dropStyle,
           }}
         >
           <img src={caps[i]} alt="" />
           <span className="capture-cell__label">{cell.label}</span>
+          {isJogSelected && <span className="capture-cell__tab">{String(i + 1).padStart(2, '0')}</span>}
         </div>
-      ))}
+        );
+      })}
       </div>
+      {jogEnlarged && jogIndex >= 0 && jogIndex < caps.length && (
+        <div className="capture-popover" style={{ width: `${40 + jogZoom * 50}%` }}>
+          <img src={caps[jogIndex]} alt="" />
+          <div className="capture-popover__hud">
+            <span className="capture-popover__label">{layout[jogIndex]?.label}</span>
+            <span className="capture-popover__index">{String(jogIndex + 1).padStart(2, '0')}/{String(captureCount).padStart(2, '0')}</span>
+          </div>
+        </div>
+      )}
     </div>
     </>
   );
+}
+
+// Vertical fader — VJ mixer style
+function HudFader({ label, value, onChange, onPress, onRelease, width, height }) {
+  const canvasRef = useRef(null);
+  const frameRef = useRef(null);
+  const dragRef = useRef({ active: false, startY: 0, startVal: 0 });
+  const FADER_W = width || 50;
+  const FADER_H = height || 100;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = FADER_W * dpr;
+    canvas.height = FADER_H * dpr;
+    canvas.style.width = FADER_W + 'px';
+    canvas.style.height = FADER_H + 'px';
+    const ctx = canvas.getContext('2d');
+    const g = (a) => `rgba(255,255,255,${a})`;
+
+    function draw() {
+      const s = dpr;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const trackX = (FADER_W * s) / 2;
+      const trackTop = 14 * s;
+      const trackBot = (FADER_H - 18) * s;
+      const trackH = trackBot - trackTop;
+
+      // Track groove — wide channel
+      const grooveW = 18 * s;
+      ctx.fillStyle = g(0.04);
+      ctx.fillRect(trackX - grooveW / 2, trackTop, grooveW, trackH);
+      ctx.strokeStyle = g(0.08);
+      ctx.lineWidth = 0.5 * s;
+      ctx.strokeRect(trackX - grooveW / 2, trackTop, grooveW, trackH);
+
+      // Handle — chunky bar
+      const handleY = trackTop + (1 - value) * trackH;
+      const hw = 22 * s;
+      const hh = 10 * s;
+      ctx.fillStyle = g(dragRef.current.active ? 0.2 : 0.1);
+      ctx.strokeStyle = g(dragRef.current.active ? 0.45 : 0.2);
+      ctx.lineWidth = 1 * s;
+      ctx.beginPath();
+      ctx.roundRect(trackX - hw / 2, handleY - hh / 2, hw, hh, 2 * s);
+      ctx.fill();
+      ctx.stroke();
+
+      // Handle notch
+      ctx.strokeStyle = g(dragRef.current.active ? 0.5 : 0.25);
+      ctx.lineWidth = 0.5 * s;
+      ctx.beginPath();
+      ctx.moveTo(trackX - 4 * s, handleY);
+      ctx.lineTo(trackX + 4 * s, handleY);
+      ctx.stroke();
+
+      // Label
+      ctx.font = `${6 * s}px 'ISO', monospace`;
+      ctx.fillStyle = g(0.2);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(label || '', trackX, (FADER_H - 10) * s);
+
+      frameRef.current = requestAnimationFrame(draw);
+    }
+    draw();
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [value, label]);
+
+  const onMouseDown = (e) => {
+    e.preventDefault();
+    dragRef.current = { active: true, startY: e.clientY, startVal: value };
+    if (onPress) onPress();
+    const onMouseMove = (e) => {
+      const dy = -(e.clientY - dragRef.current.startY);
+      const sensitivity = 0.008;
+      let next = dragRef.current.startVal + dy * sensitivity;
+      next = Math.max(0, Math.min(1, next));
+      if (onChange) onChange(next);
+    };
+    const onMouseUp = () => {
+      dragRef.current.active = false;
+      if (onRelease) onRelease();
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  return (
+    <canvas
+      ref={canvasRef}
+      onMouseDown={onMouseDown}
+      style={{ width: FADER_W + 'px', height: FADER_H + 'px', cursor: 'ns-resize' }}
+    />
+  );
+}
+
+// Standalone oscilloscope display
+function ScopeDisplay({ scopeMode, clipCount, layout }) {
+  const canvasRef = useRef(null);
+  const frameRef = useRef(null);
+  const seedRef = useRef(Math.random() * 1000);
+  const burstRef = useRef({ time: 0, lastCount: 0, size: 1, push: 0 });
+  const W = 140, H = 100;
+
+  useEffect(() => {
+    if (clipCount > burstRef.current.lastCount && burstRef.current.lastCount > 0) {
+      const newClip = layout[clipCount - 1];
+      const area = newClip ? (newClip.cs * newClip.rs) : 1;
+      burstRef.current.time = performance.now();
+      burstRef.current.size = area;
+      burstRef.current.push += area * 0.8;
+    }
+    burstRef.current.lastCount = clipCount;
+  }, [clipCount, layout]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    const s = dpr;
+    const seed = seedRef.current;
+    const g = (a) => `rgba(255,255,255,${a})`;
+
+    function draw(t) {
+      ctx.clearRect(0, 0, W * s, H * s);
+      const elapsed = t * 0.001;
+
+      const scopeW = W * s;
+      const scopeH2 = H * s;
+      const scopeCx = scopeW / 2;
+      const scopeCy = scopeH2 / 2;
+      const scopeR = Math.min(scopeW, scopeH2) * 0.42;
+
+      // Border
+      ctx.strokeStyle = g(0.06);
+      ctx.lineWidth = 0.5 * s;
+      ctx.strokeRect(0, 0, scopeW, scopeH2);
+
+      // Crosshair
+      ctx.strokeStyle = g(0.03);
+      ctx.beginPath();
+      ctx.moveTo(0, scopeCy); ctx.lineTo(scopeW, scopeCy);
+      ctx.moveTo(scopeCx, 0); ctx.lineTo(scopeCx, scopeH2);
+      ctx.stroke();
+
+      const totalCells = 80;
+      const occupiedCells = layout.slice(0, clipCount).reduce((sum, c) => sum + (c ? c.cs * c.rs : 0), 0);
+      const fillRatio = Math.min(occupiedCells / totalCells, 1);
+
+      const burstAge = t - burstRef.current.time;
+      const burstDecay = burstAge < 600 ? Math.pow(1 - burstAge / 600, 2) : 0;
+      const burstSize = burstRef.current.size / 12;
+      const burst = burstDecay * Math.min(burstSize, 1);
+      const phaseDrift = elapsed * (0.3 + fillRatio * 0.5) + burstRef.current.push * 0.2;
+      const baseR = scopeR * (0.3 + fillRatio * 0.5 + burst * 0.3);
+      const steps = 300;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, scopeW, scopeH2);
+      ctx.clip();
+
+      if (scopeMode === 0) {
+        // STRAND
+        const arms = 5 + Math.floor(fillRatio * 4);
+        ctx.strokeStyle = g(0.08 + fillRatio * 0.15 + burst * 0.15);
+        ctx.lineWidth = (0.8 + burst * 0.5) * s;
+        for (let a = 0; a < arms; a++) {
+          const armAngle = (a / arms) * Math.PI * 2 + elapsed * 0.2 + seed;
+          ctx.beginPath();
+          for (let i = 0; i <= 80; i++) {
+            const t2 = i / 80;
+            const reach = baseR * t2 * (1 + Math.sin(elapsed * 0.8 + a * 2.1) * 0.3);
+            const wander = Math.sin(t2 * 6 + elapsed * 1.5 + a * 3 + seed) * baseR * 0.15 * t2;
+            const decay = Math.sin(t2 * Math.PI + elapsed * 2 + a) * burst * baseR * 0.2;
+            const angle = armAngle + wander / (baseR || 1) + decay / (baseR || 1);
+            const x = scopeCx + Math.cos(angle) * reach;
+            const y = scopeCy + Math.sin(angle) * reach;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+        ctx.strokeStyle = g(0.12 + burst * 0.2);
+        ctx.lineWidth = 0.5 * s;
+        ctx.beginPath();
+        for (let i = 0; i <= 60; i++) {
+          const t2 = (i / 60) * Math.PI * 2;
+          const r = baseR * 0.15 * (1 + Math.sin(t2 * 3 + elapsed * 3) * 0.5);
+          const x = scopeCx + Math.cos(t2 + elapsed) * r;
+          const y = scopeCy + Math.sin(t2 + elapsed * 1.3) * r;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+      } else if (scopeMode === 1) {
+        // BRIDGE
+        const k = 3 + Math.floor(fillRatio * 4);
+        const layers = 3;
+        for (let l = 0; l < layers; l++) {
+          const lr = baseR * (0.4 + l * 0.3);
+          const lk = k + l * 0.5;
+          ctx.strokeStyle = g((0.06 + fillRatio * 0.1 + burst * 0.1) * (1 - l * 0.25));
+          ctx.lineWidth = (1 - l * 0.3 + burst * 0.3) * s;
+          ctx.beginPath();
+          for (let i = 0; i <= steps; i++) {
+            const t2 = (i / steps) * Math.PI * 2 * lk;
+            const rose = lr * Math.cos(t2 * (lk / 2) + phaseDrift * (1 + l * 0.3));
+            const bend = Math.sin(t2 * 0.5 + elapsed * 0.4 + l) * burst * scopeR * 0.1;
+            const x = scopeCx + (rose + bend) * Math.cos(t2 + phaseDrift + l * 0.7);
+            const y = scopeCy + (rose + bend) * Math.sin(t2 + phaseDrift * 0.8 + l * 1.1 + seed);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+        ctx.strokeStyle = g(0.04 + burst * 0.06);
+        ctx.lineWidth = 0.5 * s;
+        for (let c = 0; c < 6; c++) {
+          const angle = (c / 6) * Math.PI + elapsed * 0.1;
+          ctx.beginPath();
+          ctx.moveTo(scopeCx + Math.cos(angle) * baseR * 0.8, scopeCy + Math.sin(angle) * baseR * 0.8);
+          ctx.lineTo(scopeCx - Math.cos(angle) * baseR * 0.8, scopeCy - Math.sin(angle) * baseR * 0.8);
+          ctx.stroke();
+        }
+
+      } else {
+        // VOID
+        const a1 = -1.4 + Math.sin(elapsed * 0.15 + seed) * 0.3;
+        const b1 = 1.6 + Math.cos(elapsed * 0.12 + seed * 2) * 0.2 + burst * 0.5;
+        const c1 = 1.0 + Math.sin(elapsed * 0.1 + seed * 3) * 0.2;
+        const d1 = 0.7 + Math.cos(elapsed * 0.08) * 0.3 + fillRatio * 0.3;
+        let ax = 0.1, ay = 0.1;
+        const scale = baseR * 0.35;
+
+        ctx.fillStyle = g(0.1 + fillRatio * 0.15 + burst * 0.2);
+        for (let i = 0; i < 2000; i++) {
+          const nx = Math.sin(a1 * ay) + c1 * Math.cos(a1 * ax);
+          const ny = Math.sin(b1 * ax) + d1 * Math.cos(b1 * ay);
+          ax = nx; ay = ny;
+          if (i > 20) ctx.fillRect(scopeCx + ax * scale, scopeCy + ay * scale, 1 * s, 1 * s);
+        }
+        ctx.fillStyle = g(0.04 + burst * 0.08);
+        ax = 0.5; ay = 0.5;
+        const a2 = a1 + 0.1, b2 = b1 - 0.1;
+        for (let i = 0; i < 1000; i++) {
+          const nx = Math.sin(a2 * ay) + c1 * Math.cos(a2 * ax);
+          const ny = Math.sin(b2 * ax) + d1 * Math.cos(b2 * ay);
+          ax = nx; ay = ny;
+          if (i > 20) ctx.fillRect(scopeCx + ax * scale, scopeCy + ay * scale, 1 * s, 1 * s);
+        }
+      }
+
+      ctx.restore();
+      frameRef.current = requestAnimationFrame(draw);
+    }
+    frameRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [scopeMode, clipCount, layout]);
+
+  return React.createElement('canvas', {
+    ref: canvasRef,
+    style: { width: W, height: H, display: 'block' }
+  });
+}
+
+// 3-position HUD pill toggle
+function HudToggle({ labels, value, onChange }) {
+  const canvasRef = useRef(null);
+  const frameRef = useRef(null);
+  const W = 140, H = 28;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    const s = dpr;
+
+    function draw() {
+      ctx.clearRect(0, 0, W * s, H * s);
+      const g = (a) => `rgba(255,255,255,${a})`;
+
+      const pillH = 18 * s;
+      const pillW = (W - 8) * s;
+      const pillX = 4 * s;
+      const pillY = (H * s - pillH) / 2;
+      const r = pillH / 2;
+
+      // Pill track
+      ctx.beginPath();
+      ctx.moveTo(pillX + r, pillY);
+      ctx.lineTo(pillX + pillW - r, pillY);
+      ctx.arc(pillX + pillW - r, pillY + r, r, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(pillX + r, pillY + pillH);
+      ctx.arc(pillX + r, pillY + r, r, Math.PI / 2, -Math.PI / 2);
+      ctx.closePath();
+      ctx.fillStyle = g(0.03);
+      ctx.fill();
+      ctx.strokeStyle = g(0.08);
+      ctx.lineWidth = 0.5 * s;
+      ctx.stroke();
+
+      // Segment dividers
+      const segW = pillW / 3;
+      for (let i = 1; i < 3; i++) {
+        const dx = pillX + i * segW;
+        ctx.strokeStyle = g(0.06);
+        ctx.beginPath();
+        ctx.moveTo(dx, pillY + 3 * s);
+        ctx.lineTo(dx, pillY + pillH - 3 * s);
+        ctx.stroke();
+      }
+
+      // Active indicator pill
+      const activeX = pillX + value * segW;
+      const activeW = segW;
+      const ir = r - 2 * s;
+      ctx.beginPath();
+      ctx.moveTo(activeX + ir + 2 * s, pillY + 2 * s);
+      ctx.lineTo(activeX + activeW - ir - 2 * s, pillY + 2 * s);
+      ctx.arc(activeX + activeW - ir - 2 * s, pillY + r, ir, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(activeX + ir + 2 * s, pillY + pillH - 2 * s);
+      ctx.arc(activeX + ir + 2 * s, pillY + r, ir, Math.PI / 2, -Math.PI / 2);
+      ctx.closePath();
+      ctx.fillStyle = g(0.08);
+      ctx.fill();
+
+      // Labels
+      ctx.font = `${6 * s}px 'ISO', monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i < 3; i++) {
+        const lx = pillX + i * segW + segW / 2;
+        ctx.fillStyle = g(i === value ? 0.5 : 0.15);
+        ctx.fillText(labels[i], lx, pillY + r);
+      }
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+
+      frameRef.current = requestAnimationFrame(draw);
+    }
+    frameRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [value, labels]);
+
+  const handleClick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const third = W / 3;
+    const clicked = x < third ? 0 : x < third * 2 ? 1 : 2;
+    if (clicked !== value) onChange(clicked);
+  };
+
+  return React.createElement('canvas', {
+    ref: canvasRef,
+    className: 'grid-controls__hud',
+    onClick: handleClick,
+    style: { cursor: 'pointer', width: W, height: H, flex: 'none' }
+  });
+}
+
+// Generic HUD knob — value 0-1, continuous rotation
+function HudKnob({ label, value, steps, activeTick, onChange, onPress, onRelease, size }) {
+  const canvasRef = useRef(null);
+  const frameRef = useRef(null);
+  const dragRef = useRef({ active: false, startY: 0, startVal: 0 });
+  const SIZE = size || 100;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = SIZE * dpr;
+    canvas.height = SIZE * dpr;
+    canvas.style.width = SIZE + 'px';
+    canvas.style.height = SIZE + 'px';
+    const ctx = canvas.getContext('2d');
+
+    const hud = (a) => `rgba(193,68,14,${a})`;
+    const cx = (SIZE * dpr) / 2;
+    const cy = (SIZE * dpr) / 2;
+    const r = (SIZE * dpr) / 2 - 10 * dpr;
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Filled knob
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.lineWidth = 0.5 * dpr;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Indicator notch — light
+      const indicatorAngle = value * Math.PI * 2 - Math.PI / 2;
+      ctx.strokeStyle = dragRef.current.active ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(indicatorAngle) * r * 0.55, cy + Math.sin(indicatorAngle) * r * 0.55);
+      ctx.lineTo(cx + Math.cos(indicatorAngle) * r, cy + Math.sin(indicatorAngle) * r);
+      ctx.stroke();
+
+      // Label
+      ctx.font = `${6 * dpr}px 'ISO', monospace`;
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(label || '', cx, cy + r + 3 * dpr);
+
+      frameRef.current = requestAnimationFrame(draw);
+    }
+    draw();
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [value, steps, activeTick, label]);
+
+  const onMouseDown = (e) => {
+    e.preventDefault();
+    dragRef.current = { active: true, startY: e.clientY, startVal: value };
+    if (onPress) onPress();
+    const onMouseMove = (e) => {
+      const dy = -(e.clientY - dragRef.current.startY);
+      const sensitivity = 0.004;
+      let next = dragRef.current.startVal + dy * sensitivity;
+      // Wrap for scrub, clamp for zoom
+      if (steps) {
+        next = ((next % 1) + 1) % 1;
+      } else {
+        next = Math.max(0, Math.min(1, next));
+      }
+      if (onChange) onChange(next);
+    };
+    const onMouseUp = () => {
+      dragRef.current.active = false;
+      if (onRelease) onRelease();
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  return (
+    <canvas
+      ref={canvasRef}
+      onMouseDown={onMouseDown}
+      style={{ width: SIZE + 'px', height: SIZE + 'px', cursor: 'grab' }}
+    />
+  );
+}
+
+// Micro-display HUD panel — animated readouts, some contextual to selected clip
+function GridControlsHud({ clipCount, jogIndex, layout }) {
+  const canvasRef = useRef(null);
+  const frameRef = useRef(null);
+  const seedRef = useRef(Math.random() * 1000);
+  const burstRef = useRef({ time: 0, lastCount: 0, size: 1, push: 0 });
+
+  // Fire burst when a new clip lands, sized by clip area
+  useEffect(() => {
+    if (clipCount > burstRef.current.lastCount && burstRef.current.lastCount > 0) {
+      const newClip = layout[clipCount - 1];
+      const area = newClip ? (newClip.cs * newClip.rs) : 1;
+      burstRef.current.time = performance.now();
+      burstRef.current.size = area;
+      burstRef.current.push += area * 0.8;
+    }
+    burstRef.current.lastCount = clipCount;
+  }, [clipCount, layout]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const W = Math.round(rect.width) || canvas.parentElement.clientWidth;
+    const H = 160;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    const seed = seedRef.current;
+
+    const g = (a) => `rgba(255,255,255,${a})`;
+    const cell = layout[jogIndex] || null;
+    const hasClip = jogIndex >= 0 && jogIndex < clipCount;
+
+    function draw(t) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const s = dpr;
+      const elapsed = t * 0.001;
+
+      const cw = W * s;
+      // Spacing system
+      const pad = 16 * s;          // outer padding
+      const labelH = 10 * s;       // label row height
+      const gap = 24 * s;          // gap between columns
+      const contentTop = pad + labelH; // where content starts (below label)
+
+      // Minimap dimensions
+      const cellW = 12 * s;
+      const cellH = 10 * s;
+      const mapW = 8 * cellW;
+      const mapH = 10 * cellH;
+
+      // Column positions
+      const col1 = pad;
+      const col2 = col1 + mapW + gap;
+      const shapeKnobW = 70 * s; // space for the shape knob
+      const col3 = col2 + 120 * s + gap + shapeKnobW;
+
+      // Module widths
+      const infoW = 120 * s;
+      const wavW = Math.max(20 * s, cw - col3 - pad);
+
+      // ── Module 1: Grid minimap ──
+      ctx.font = `${6 * s}px 'ISO', monospace`;
+      ctx.fillStyle = g(0.2);
+      ctx.fillText('GRID MAP', col1, pad);
+      for (let i = 0; i < Math.min(clipCount, layout.length); i++) {
+        const c = layout[i];
+        if (!c) continue;
+        const isSelected = i === jogIndex;
+        ctx.fillStyle = isSelected ? g(0.55) : g(0.08);
+        ctx.fillRect(col1 + c.col * cellW, contentTop + c.row * cellH, c.cs * cellW - 1 * s, c.rs * cellH - 1 * s);
+      }
+      ctx.strokeStyle = g(0.06);
+      ctx.lineWidth = 0.5 * s;
+      ctx.strokeRect(col1, contentTop, mapW, mapH);
+
+      // ── Module 2: Clip info (contextual) ──
+      ctx.font = `${6 * s}px 'ISO', monospace`;
+      ctx.fillStyle = g(0.2);
+      ctx.fillText('CLIP DATA', col2, pad);
+
+      ctx.textBaseline = 'top';
+      if (hasClip && cell) {
+        const lines = [
+          `IDX  ${String(jogIndex + 1).padStart(2, '0')}/${String(clipCount).padStart(2, '0')}`,
+          `TAG  ${cell.label || '---'}`,
+          `POS  C${cell.col} R${cell.row}`,
+          `DIM  ${cell.cs}x${cell.rs}`,
+          `MODE ${cell.fallFrom !== undefined ? 'DROP' : 'BIN'}`,
+        ];
+        const lineH = 11 * s;
+        const blockH = lines.length * lineH;
+        const dataTop = contentTop + mapH - blockH;
+
+        // Decorative typography — gap between clip data and meters
+        // Hash changes per capture so each clip randomizes the display
+        const h = (v) => { let x = Math.sin(v * 2654435761) * 43758.5453; return x - Math.floor(x); };
+        const capSeed = clipCount * 997 + seed;
+        const freeH = dataTop - contentTop;
+
+        const decoLeft = col2 + infoW + 8 * s;
+        const decoW = col3 - decoLeft - 8 * s;
+        const decoTop = contentTop;
+        const decoH = H * s - decoTop - 10 * s;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(decoLeft, decoTop, decoW, decoH);
+        ctx.clip();
+
+        const syms = ['◆', '▲', '■', '●', '◇', '△', '□', '○', '⬡', '⊕', '⊗', '∞', '⌬', '⏣', '⎔', '⟐'];
+        const words = ['STRAND', 'BRIDGE', 'VOID', 'SIGNAL', 'PHASE', 'DECAY', 'FLUX', 'DRIFT', 'NODE', 'ECHO', 'NULL', 'SYNC', 'PULSE', 'LATCH', 'GATE', 'CORE'];
+
+        // Large number — randomized per capture
+        const bigNum = String(Math.floor(h(capSeed + 1) * 99) + 1).padStart(2, '0');
+        ctx.font = `${36 * s}px 'ISO', monospace`;
+        ctx.fillStyle = g(0.04);
+        ctx.fillText(bigNum, decoLeft, decoTop);
+        // Random dimension-like string
+        const dimA = Math.floor(h(capSeed + 2) * 8) + 1;
+        const dimB = Math.floor(h(capSeed + 3) * 8) + 1;
+        ctx.font = `${22 * s}px 'ISO', monospace`;
+        ctx.fillStyle = g(0.035);
+        ctx.fillText(dimA + '×' + dimB, decoLeft, decoTop + 38 * s);
+        // Symbol pair
+        const s1 = syms[Math.floor(h(capSeed + 4) * syms.length)];
+        const s2 = syms[Math.floor(h(capSeed + 5) * syms.length)];
+        ctx.font = `${16 * s}px 'ISO', monospace`;
+        ctx.fillStyle = g(0.06);
+        ctx.fillText(s1 + ' ' + s2, decoLeft, decoTop + 62 * s);
+        // Hex address
+        const hexVal = (Math.floor(h(capSeed + 6) * 0xFFFFFFFF) >>> 0).toString(16).toUpperCase().padStart(8, '0');
+        ctx.font = `${8 * s}px 'ISO', monospace`;
+        ctx.fillStyle = g(0.05);
+        ctx.fillText('0x' + hexVal, decoLeft, decoTop + 80 * s);
+        // Random word
+        const word = words[Math.floor(h(capSeed + 7) * words.length)];
+        ctx.font = `${7 * s}px 'ISO', monospace`;
+        ctx.fillStyle = g(0.04);
+        ctx.fillText(word, decoLeft, decoTop + 92 * s);
+        // Extra large symbol — bottom right
+        const bigSym = syms[Math.floor(h(capSeed + 8) * syms.length)];
+        ctx.font = `${48 * s}px 'ISO', monospace`;
+        ctx.fillStyle = g(0.025);
+        ctx.textAlign = 'right';
+        ctx.fillText(bigSym, decoLeft + decoW, decoTop + decoH - 20 * s);
+        ctx.textAlign = 'left';
+
+        ctx.restore();
+
+        lines.forEach((line, i) => {
+          ctx.fillStyle = g(i === 0 ? 0.35 : 0.18);
+          ctx.font = `${6 * s}px 'ISO', monospace`;
+          ctx.fillText(line, col2, dataTop + i * lineH);
+        });
+      } else {
+        // Empty state typography
+        ctx.font = `${28 * s}px 'ISO', monospace`;
+        ctx.fillStyle = g(0.03);
+        ctx.fillText('--', col2, contentTop + 2 * s);
+        ctx.font = `${12 * s}px 'ISO', monospace`;
+        ctx.fillStyle = g(0.04);
+        ctx.fillText('◇ IDLE', col2, contentTop + 36 * s);
+        ctx.font = `${6 * s}px 'ISO', monospace`;
+        ctx.fillStyle = g(0.08);
+        ctx.fillText('NO SIGNAL', col2, contentTop + mapH - 11 * s);
+      }
+      ctx.textBaseline = 'alphabetic';
+
+      // ── Module 3: Activity meters (top row, full width) ──
+      const meterH = 35 * s;
+      const rowGap = 8 * s;
+
+      const groupCount = 4;
+      const barsPerGroup = 8;
+      const groupGap = 12 * s;
+      const groupW = (wavW - groupGap * (groupCount - 1)) / groupCount;
+      const barGap = 1.5 * s;
+      const barW = (groupW - barGap * (barsPerGroup - 1)) / barsPerGroup;
+
+      ctx.font = `${6 * s}px 'ISO', monospace`;
+      const meterLabels = ['ACTIVITY', 'ENTROPY', 'FLUX', 'DENSITY'];
+      for (let gr = 0; gr < groupCount; gr++) {
+        const gx = col3 + gr * (groupW + groupGap);
+        ctx.fillStyle = g(0.15);
+        ctx.fillText(meterLabels[gr], gx, pad);
+        for (let i = 0; i < barsPerGroup; i++) {
+          const x = gx + i * (barW + barGap);
+          let h;
+          if (gr === 0) h = (Math.sin(-elapsed * 1.5 + i * 0.9 + seed) * 0.5 + 0.5);
+          else if (gr === 1) h = (Math.sin(-elapsed * 2.2 + i * 1.3 + seed * 2) * 0.5 + 0.5) * (Math.cos(-elapsed * 0.7 + i) * 0.3 + 0.7);
+          else if (gr === 2) h = Math.abs(Math.sin(-elapsed * 1.8 + i * 0.6 + seed * 3));
+          else h = (Math.sin(-elapsed * 0.9 + i * 2.1 + seed * 4) * 0.5 + 0.5) * (0.4 + Math.sin(-elapsed * 3 + i) * 0.3 + 0.3);
+          const barH = h * meterH * 0.85;
+          const isHot = i === (Math.floor(elapsed * (2 + gr)) % barsPerGroup);
+          ctx.fillStyle = g(0.04 + (isHot ? 0.06 : 0));
+          ctx.fillRect(x, contentTop + meterH - barH, barW, barH);
+        }
+      }
+
+      // ── Module 3b: LCD dot-matrix (second row, full width) ──
+      const lcdTop = contentTop + meterH + rowGap + labelH;
+      const lcdX = col3;
+      const lcdW = wavW;
+      const lcdH = H * s - lcdTop - 10 * s;
+
+      ctx.font = `${6 * s}px 'ISO', monospace`;
+      ctx.fillStyle = g(0.15);
+      ctx.fillText('MATRIX', lcdX, lcdTop - labelH + 2 * s);
+
+      // LCD background
+      ctx.fillStyle = g(0.02);
+      ctx.fillRect(lcdX, lcdTop, lcdW, lcdH);
+      ctx.strokeStyle = g(0.06);
+      ctx.lineWidth = 0.5 * s;
+      ctx.strokeRect(lcdX, lcdTop, lcdW, lcdH);
+
+      // Dot grid — sparse LCD
+      const dotSize = 2 * s;
+      const dotStep = 6 * s;
+      const dotCols = Math.max(1, Math.floor(lcdW / dotStep));
+      const dotRows = Math.max(1, Math.floor(lcdH / dotStep));
+
+      for (let row = 0; row < dotRows; row++) {
+        for (let col = 0; col < dotCols; col++) {
+          const dx = lcdX + col * dotStep + 2 * s;
+          const dy = lcdTop + row * dotStep + 2 * s;
+
+          // Stable hash per dot
+          const hash = Math.sin(col * 127.1 + row * 311.7 + seed * 43.3) * 43758.5453;
+          const rnd = hash - Math.floor(hash);
+
+          // Only ~12% of dots lit, flickering independently
+          const phase = elapsed * (0.3 + rnd * 2) + rnd * 100;
+          const lit = Math.sin(phase) > 0.85;
+
+          if (lit) {
+            ctx.fillStyle = g(0.25 + rnd * 0.15);
+            ctx.fillRect(dx, dy, dotSize, dotSize);
+          }
+        }
+      }
+
+      // ── Module 5: Scan line (below minimap + clip data) ──
+      const scopeBottom = contentTop + meterH + labelH + 4 * s + (H * s - (contentTop + meterH + labelH + 4 * s) - 10 * s);
+      const scanLineW = col2 + infoW - col1;
+      const scanY = scopeBottom - 3 * s;
+      const scanPos = ((elapsed * 40 + seed * 100) % (scanLineW / s)) * s;
+      ctx.fillStyle = g(0.04);
+      ctx.fillRect(col1, scanY, scanLineW, 3 * s);
+      ctx.fillStyle = g(0.2);
+      ctx.fillRect(col1 + scanPos, scanY, 20 * s, 3 * s);
+
+      frameRef.current = requestAnimationFrame(draw);
+    }
+    frameRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [clipCount, jogIndex, layout]);
+
+  return <canvas ref={canvasRef} className="grid-controls__hud" />;
 }
 
 function GlitchCenterName({ onExit }) {
@@ -4263,6 +5177,14 @@ function App() {
   const [nameFallen, setNameFallen] = useState(false);
   const [nameHovered, setNameHovered] = useState(false);
   const [audioMuted, setAudioMuted] = useState(() => localStorage.getItem('audio-muted') === 'true');
+  const [jogIndex, setJogIndex] = useState(0);
+  const [jogEnlarged, setJogEnlarged] = useState(false);
+  const [jogClipCount, setJogClipCount] = useState(0);
+  const [jogZoom, setJogZoom] = useState(0);
+  const [jogLayout, setJogLayout] = useState([]);
+  const [scopeMode, setScopeMode] = useState(0);
+  const [captureKey, setCaptureKey] = useState(0);
+  const [resetSignal, setResetSignal] = useState(0);
   const initialLoadRef = useRef(true);
   const leftPanelRef = useRef(null);
 
@@ -4498,7 +5420,50 @@ function App() {
             <ProjectView project={selected} transitioning={transitioning} />
           </>
         ) : glitchMode && !isMobile ? (
-          <GlitchCaptureGrid />
+          <>
+            <div className="capture-area">
+              <GlitchCaptureGrid key={captureKey} jogIndex={jogIndex} jogEnlarged={jogEnlarged} jogZoom={jogZoom} onJogData={(d) => { setJogClipCount(d.count); setJogLayout(d.layout || []); }} resetSignal={resetSignal} onResetDone={() => { setCaptureKey(k => k + 1); setJogIndex(0); setJogClipCount(0); setJogLayout([]); setResetSignal(0); }} />
+            </div>
+            <div className="grid-controls">
+              <GridControlsHud clipCount={jogClipCount} jogIndex={jogIndex} layout={jogLayout} />
+              <div className="grid-controls__scope">
+                <ScopeDisplay scopeMode={scopeMode} clipCount={jogClipCount} layout={jogLayout} />
+                <HudToggle
+                  labels={['STRAND', 'BRIDGE', 'VOID']}
+                  value={scopeMode}
+                  onChange={setScopeMode}
+                />
+              </div>
+              <div className="grid-controls__right">
+                <div className="grid-controls__knobs">
+                  <HudKnob
+                    label="SCRUB"
+                    value={jogClipCount > 1 ? jogIndex / (jogClipCount - 1) : 0}
+                    steps={jogClipCount || 1}
+                    activeTick={jogIndex}
+                    size={70}
+                    onChange={(v) => {
+                      if (jogClipCount > 1) {
+                        const idx = Math.round(v * (jogClipCount - 1));
+                        setJogIndex(Math.max(0, Math.min(jogClipCount - 1, idx)));
+                      }
+                    }}
+                  />
+                  <HudFader
+                    label="ZOOM"
+                    value={jogZoom}
+                    width={35}
+                    height={70}
+                    onChange={(v) => { setJogZoom(v); if (v > 0 && !jogEnlarged) setJogEnlarged(true); }}
+                    onRelease={() => setJogEnlarged(false)}
+                  />
+                </div>
+                <button className="grid-controls__reset" onClick={() => setResetSignal(s => s + 1)}>
+                  REINITIALIZE STRAND
+                </button>
+              </div>
+            </div>
+          </>
         ) : (
           <>
             <AudioToggle muted={audioMuted} onToggle={() => { SoundEngine.init(); const next = !audioMuted; setAudioMuted(next); SoundEngine.setMute(next); if (!next) SoundEngine.uiClick(); }} />
