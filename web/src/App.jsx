@@ -5365,8 +5365,9 @@ function App() {
           </FadeIn>
           <div className="about-links">
             <a href="https://weareallgonners.bandcamp.com/" target="_blank" rel="noopener noreferrer">Bandcamp &#x2197;</a>
+            <a href="https://github.com/thekevinboyle" target="_blank" rel="noopener noreferrer">GitHub &#x2197;</a>
+            <a href="https://www.linkedin.com/in/thekevinboyle/" target="_blank" rel="noopener noreferrer">LinkedIn &#x2197;</a>
             <a href="https://transgressive.libsyn.com/" target="_blank" rel="noopener noreferrer">Transgressive Podcast &#x2197;</a>
-            <a href="https://www.linkedin.com/in/kevinboyle/" target="_blank" rel="noopener noreferrer">LinkedIn &#x2197;</a>
           </div>
         </div>
 

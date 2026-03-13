@@ -4,8 +4,9 @@ import { motion } from 'framer-motion';
 const About = () => {
     const sideProjects = [
         { name: 'Bandcamp', url: 'https://weareallgonners.bandcamp.com/' },
+        { name: 'GitHub', url: 'https://github.com/thekevinboyle' },
+        { name: 'LinkedIn', url: 'https://www.linkedin.com/in/thekevinboyle/' },
         { name: 'Transgressive Podcast', url: 'https://transgressive.libsyn.com/' },
-        { name: 'LinkedIn', url: 'https://www.linkedin.com/in/kevinboyle/' },
     ];
 
     return (
