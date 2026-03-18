@@ -5193,16 +5193,6 @@ function App() {
   // Keep sound engine in sync with current viz
   useEffect(() => { SoundEngine.setVizIndex(vizIndex); }, [vizIndex]);
 
-  // Auto-trigger glitch intro only on first visit this session (desktop only)
-  useEffect(() => {
-    if (isMobile) return;
-    if (sessionStorage.getItem('glitch-seen')) return;
-    const timer = setTimeout(() => {
-      setGlitchMode(true);
-      sessionStorage.setItem('glitch-seen', '1');
-    }, 800);
-    return () => clearTimeout(timer);
-  }, []);
 
   // Cascading text melt effect in glitch mode
   useGlitchMelt(glitchMode, leftPanelRef);
