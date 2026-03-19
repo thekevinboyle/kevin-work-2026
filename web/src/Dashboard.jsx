@@ -156,7 +156,7 @@ function BreakdownPanel({ title, data, nameKey, valueKey }) {
           <div className="dash__panel-row" key={row[nameKey] || i}>
             <div
               className="dash__panel-row-bar"
-              style={{ width: mounted ? `${pct}%` : '0%' }}
+              style={{ width: mounted ? `${pct}%` : '0%', transitionDelay: `${i * 50}ms` }}
             />
             <span className="dash__panel-row-name">{row[nameKey] || '(none)'}</span>
             <span className="dash__panel-row-value">{formatNumber(row[valueKey])}</span>
@@ -221,7 +221,7 @@ function BreakdownRows({ data, nameKey, valueKey }) {
           <div className="dash__panel-row" key={row[nameKey] || i}>
             <div
               className="dash__panel-row-bar"
-              style={{ width: mounted ? `${pct}%` : '0%' }}
+              style={{ width: mounted ? `${pct}%` : '0%', transitionDelay: `${i * 50}ms` }}
             />
             <span className="dash__panel-row-name">{row[nameKey] || '(none)'}</span>
             <span className="dash__panel-row-value">{formatNumber(row[valueKey])}</span>
@@ -517,26 +517,27 @@ function TimeseriesChart({ timeseries }) {
 
 /* ========== Events Strip ========== */
 
-const EVENT_NAMES = [
-  'EMAIL CLICKED',
-  'CV DOWNLOADED',
-  'GLITCH MODE',
-  'PROJECT VIEWS',
-  'ABOUT SCROLL',
-  'EXTERNAL LINK',
+// Maps display labels to Plausible event names from trackEvent() calls
+const EVENT_MAP = [
+  { label: 'EMAIL CLICKED', event: 'Email Click' },
+  { label: 'CV DOWNLOADED', event: 'CV Download' },
+  { label: 'GLITCH MODE', event: 'Glitch Mode' },
+  { label: 'PROJECT VIEWS', event: 'Project View' },
+  { label: 'ABOUT SCROLL', event: 'About Scroll' },
+  { label: 'EXTERNAL LINK', event: 'External Link' },
 ]
 
 function EventsStrip({ events }) {
   return (
     <div className="dash__events">
-      {EVENT_NAMES.map(name => {
+      {EVENT_MAP.map(({ label, event }) => {
         const eventData = events?.find(
-          e => e.name?.toUpperCase() === name || e.goal?.toUpperCase() === name
+          e => e.name === event
         )
-        const value = eventData?.visitors ?? eventData?.total ?? null
+        const value = eventData?.events ?? eventData?.visitors ?? null
         return (
-          <div className="dash__event" key={name}>
-            <span className="dash__event-name">{name}</span>
+          <div className="dash__event" key={label}>
+            <span className="dash__event-name">{label}</span>
             <span className="dash__event-value">{value != null ? formatNumber(value) : '—'}</span>
           </div>
         )

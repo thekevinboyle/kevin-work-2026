@@ -71,6 +71,7 @@ export function usePlausible(period = '30d', retryKey = 0) {
         os,
         entryPages,
         exitPages,
+        events,
       ] = await Promise.all([
         fetchApi('aggregate', {
           period: p,
@@ -129,6 +130,12 @@ export function usePlausible(period = '30d', retryKey = 0) {
           metrics: 'visitors',
           limit: 10,
         }),
+        fetchApi('breakdown', {
+          period: p,
+          property: 'event:name',
+          metrics: 'visitors,events',
+          limit: 10,
+        }),
       ])
 
       setData(prev => ({
@@ -143,6 +150,7 @@ export function usePlausible(period = '30d', retryKey = 0) {
         os: os.results,
         entryPages: entryPages.results,
         exitPages: exitPages.results,
+        events: events.results,
         loading: false,
       }))
     } catch (err) {
