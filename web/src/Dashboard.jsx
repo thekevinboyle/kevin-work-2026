@@ -143,6 +143,7 @@ function BreakdownPanel({ title, data, nameKey, valueKey }) {
   const maxVal = rows.length > 0 ? Math.max(...rows.map(r => r[valueKey] || 0)) : 1
 
   useEffect(() => {
+    setMounted(false)
     const id = requestAnimationFrame(() => setMounted(true))
     return () => cancelAnimationFrame(id)
   }, [data])
@@ -627,12 +628,18 @@ function DashboardView() {
   const [period, setPeriod] = useState('30d')
   const [retryKey, setRetryKey] = useState(0)
   const [glitch, setGlitch] = useState(false)
+  const glitchTimer = useRef(null)
   const data = usePlausible(period, retryKey)
+
+  useEffect(() => {
+    return () => clearTimeout(glitchTimer.current)
+  }, [])
 
   const handlePeriodChange = useCallback((newPeriod) => {
     if (newPeriod === period) return
     setGlitch(true)
-    setTimeout(() => setGlitch(false), 150)
+    clearTimeout(glitchTimer.current)
+    glitchTimer.current = setTimeout(() => setGlitch(false), 150)
     setPeriod(newPeriod)
   }, [period])
 
