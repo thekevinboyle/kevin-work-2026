@@ -1,0 +1,482 @@
+/* ========================
+   DASHBOARD — HUD Command Center
+   ======================== */
+
+.dash-gate {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  font-family: var(--font);
+}
+
+.dash-gate__form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.dash-gate__label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dash-gate__input {
+  font-family: var(--font);
+  font-size: 14px;
+  letter-spacing: 1px;
+  padding: 10px 16px;
+  border: 0.5px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  text-align: center;
+  outline: none;
+  width: 280px;
+  transition: border-color 0.2s;
+}
+
+.dash-gate__input:focus {
+  border-color: var(--accent);
+}
+
+.dash-gate__input::placeholder {
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+
+.dash-gate__error {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--accent);
+}
+
+/* ========================
+   DASHBOARD LAYOUT
+   ======================== */
+
+.dash {
+  width: 100%;
+  min-height: 100vh;
+  background: var(--bg);
+  font-family: var(--font);
+  overflow-y: auto;
+}
+
+/* Zone 1: Status Bar */
+.dash__status {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--bg);
+}
+
+.dash__title {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+}
+
+.dash__body {
+  padding: 24px;
+}
+
+/* Zone 1: Period Selector */
+.dash__periods {
+  display: flex;
+  gap: 2px;
+}
+
+.dash__period-btn {
+  font-family: var(--font);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border: 0.5px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dash__period-btn:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.dash__period-btn--active {
+  color: var(--bg);
+  background: var(--text);
+  border-color: var(--text);
+}
+
+/* Realtime indicator */
+.dash__realtime {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.dash__realtime-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.dash__realtime-count {
+  transition: color 0.3s;
+}
+
+.dash__realtime-count--flash {
+  color: var(--accent);
+}
+
+/* Zone 2: KPI Readouts */
+.dash__kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  background: var(--border);
+  margin: 0 24px;
+  border: 0.5px solid var(--border);
+}
+
+.dash__kpi {
+  background: var(--bg);
+  padding: 16px 20px;
+  position: relative;
+}
+
+.dash__kpi-label {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dash__kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  color: var(--text);
+}
+
+.dash__kpi-delta {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.dash__kpi-delta--up {
+  color: var(--accent);
+}
+
+.dash__kpi-delta--down {
+  color: var(--text-muted);
+}
+
+/* Registration marks on KPI corners */
+.dash__kpi::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-top: 0.5px solid var(--accent);
+  border-right: 0.5px solid var(--accent);
+  opacity: 0.4;
+}
+
+/* Zone 3: Timeseries Chart */
+.dash__chart {
+  margin: 24px;
+  padding: 20px;
+  border: 0.5px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.dash__chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.dash__chart-title {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dash__chart-legend {
+  display: flex;
+  gap: 16px;
+}
+
+.dash__chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.dash__chart-legend-line {
+  width: 16px;
+  height: 1px;
+}
+
+.dash__chart-svg {
+  width: 100%;
+  display: block;
+}
+
+/* Scan-line overlay */
+.dash__chart::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.015) 2px,
+    rgba(0, 0, 0, 0.015) 4px
+  );
+  pointer-events: none;
+}
+
+/* Chart tooltip */
+.dash__tooltip {
+  position: absolute;
+  pointer-events: none;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  font-family: var(--font);
+  padding: 6px 10px;
+  border: 0.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  white-space: nowrap;
+  z-index: 10;
+}
+
+/* Zone 4: Breakdown Panels */
+.dash__breakdowns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  margin: 0 24px;
+  border: 0.5px solid var(--border);
+}
+
+.dash__panel {
+  background: var(--bg);
+  padding: 20px;
+}
+
+.dash__panel-title {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dash__panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 0;
+  position: relative;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.dash__panel-row-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: rgba(193, 68, 14, 0.08);
+  transition: background 0.2s, width 0.5s ease-out;
+  border-radius: 0;
+}
+
+.dash__panel-row:hover .dash__panel-row-bar {
+  background: rgba(193, 68, 14, 0.18);
+}
+
+.dash__panel-row-name {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 70%;
+}
+
+.dash__panel-row-value {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Fade out last rows */
+.dash__panel-row:nth-last-child(-n+2) {
+  opacity: 0.5;
+}
+
+/* Device tabs */
+.dash__device-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.dash__device-tab {
+  font-family: var(--font);
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  padding: 3px 8px;
+  border: 0.5px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dash__device-tab--active {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+/* Zone 5: Custom Events */
+.dash__events {
+  display: flex;
+  gap: 1px;
+  background: var(--border);
+  margin: 1px 24px 24px;
+  border: 0.5px solid var(--border);
+}
+
+.dash__event {
+  flex: 1;
+  background: var(--bg);
+  padding: 14px 20px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.dash__event-name {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dash__event-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glitch micro-effect on period switch */
+@keyframes dash-glitch {
+  0% { transform: translateX(0); }
+  20% { transform: translateX(-2px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-1px); }
+  80% { transform: translateX(1px); }
+  100% { transform: translateX(0); }
+}
+
+.dash--glitch .dash__kpis,
+.dash--glitch .dash__chart,
+.dash--glitch .dash__breakdowns,
+.dash--glitch .dash__events {
+  animation: dash-glitch 0.15s ease-out;
+}
+
+/* Loading state */
+.dash__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+}
+
+/* Error state */
+.dash__error {
+  margin: 24px;
+  padding: 16px 20px;
+  border: 0.5px solid var(--accent);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+}
+
+/* Responsive: stack on mobile */
+@media (max-width: 768px) {
+  .dash__kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dash__kpis .dash__kpi:last-child {
+    grid-column: span 2;
+  }
+  .dash__breakdowns {
+    grid-template-columns: 1fr;
+  }
+  .dash__events {
+    flex-direction: column;
+  }
+  .dash__status {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
