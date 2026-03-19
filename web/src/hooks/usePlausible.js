@@ -27,7 +27,7 @@ async function fetchApi(endpoint, params = {}) {
   return res.json()
 }
 
-export function usePlausible(period = '30d') {
+export function usePlausible(period = '30d', retryKey = 0) {
   const [data, setData] = useState({
     realtime: 0,
     aggregate: null,
@@ -148,7 +148,7 @@ export function usePlausible(period = '30d') {
     } catch (err) {
       setData(prev => ({ ...prev, loading: false, error: err.message }))
     }
-  }, [period])
+  }, [period, retryKey])
 
   // Fetch all data when period changes
   useEffect(() => {
