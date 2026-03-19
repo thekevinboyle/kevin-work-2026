@@ -4,6 +4,7 @@ import { experience } from './data/experience';
 import { capabilities } from './data/capabilities';
 import { visualizations } from './visualizations';
 import { SoundEngine } from './sound';
+import { trackEvent } from './plausible';
 
 // Build flat index sorted by year descending
 const allProjects = projects.map((p, i) => ({
@@ -5276,7 +5277,10 @@ function App() {
 
   const handleSelect = useCallback((id) => {
     const newId = selectedId === id ? null : id;
-
+    if (newId) {
+      const project = allProjects.find(p => p.id === newId);
+      trackEvent('Project View', { project: project?.details?.title || newId });
+    }
     if (selectedId && newId) {
       setTransitioning(true);
       setTimeout(() => {
@@ -5296,7 +5300,7 @@ function App() {
       {/* LEFT PANEL */}
       <div className="left-panel" ref={leftPanelRef} onClick={glitchMode && !isMobile ? () => { initialLoadRef.current = false; setGlitchMode(false); setNameFallen(false); } : undefined}>
         <nav className="nav">
-          <span className="nav__name" style={{ cursor: !isMobile && !glitchMode ? 'pointer' : 'default' }} onClick={!isMobile && !glitchMode ? () => setGlitchMode(true) : undefined} onMouseEnter={() => !glitchMode && !isMobile && setNameHovered(true)} onMouseLeave={() => setNameHovered(false)}>
+          <span className="nav__name" style={{ cursor: !isMobile && !glitchMode ? 'pointer' : 'default' }} onClick={!isMobile && !glitchMode ? () => { trackEvent('Glitch Mode'); setGlitchMode(true); } : undefined} onMouseEnter={() => !glitchMode && !isMobile && setNameHovered(true)} onMouseLeave={() => setNameHovered(false)}>
             <FallingName active={glitchMode} onAllFallen={() => setNameFallen(true)} hovered={nameHovered} />
           </span>
           <span className="nav__info">
@@ -5304,9 +5308,9 @@ function App() {
             <span>Austin, TX</span>
           </span>
           <span className="nav__links">
-            <a href="mailto:thekevinboyle@gmail.com">Email &#x2197;</a>
-            <a href="#about" onClick={(e) => { e.preventDefault(); document.querySelector('.about-section')?.scrollIntoView({ behavior: 'smooth' }); }}>About &#x2197;</a>
-            <a href="/kevin-boyle-general-2026.pdf" target="_blank" rel="noopener noreferrer">CV &#x2197;</a>
+            <a href="mailto:thekevinboyle@gmail.com" onClick={() => trackEvent('Email Click')}>Email &#x2197;</a>
+            <a href="#about" onClick={(e) => { e.preventDefault(); trackEvent('About Scroll'); document.querySelector('.about-section')?.scrollIntoView({ behavior: 'smooth' }); }}>About &#x2197;</a>
+            <a href="/kevin-boyle-general-2026.pdf" target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('CV Download')}>CV &#x2197;</a>
           </span>
         </nav>
 
@@ -5354,10 +5358,10 @@ function App() {
             Now I apply those principles to human-AI collaboration, designing the invisible architectures that shape how machines understand intent.
           </FadeIn>
           <div className="about-links">
-            <a href="https://weareallgonners.bandcamp.com/" target="_blank" rel="noopener noreferrer">Bandcamp &#x2197;</a>
-            <a href="https://github.com/thekevinboyle" target="_blank" rel="noopener noreferrer">GitHub &#x2197;</a>
-            <a href="https://www.linkedin.com/in/thekevinboyle/" target="_blank" rel="noopener noreferrer">LinkedIn &#x2197;</a>
-            <a href="https://transgressive.libsyn.com/" target="_blank" rel="noopener noreferrer">Transgressive Podcast &#x2197;</a>
+            <a href="https://weareallgonners.bandcamp.com/" target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('External Link', { destination: 'Bandcamp' })}>Bandcamp &#x2197;</a>
+            <a href="https://github.com/thekevinboyle" target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('External Link', { destination: 'GitHub' })}>GitHub &#x2197;</a>
+            <a href="https://www.linkedin.com/in/thekevinboyle/" target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('External Link', { destination: 'LinkedIn' })}>LinkedIn &#x2197;</a>
+            <a href="https://transgressive.libsyn.com/" target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('External Link', { destination: 'Podcast' })}>Transgressive Podcast &#x2197;</a>
           </div>
         </div>
 
@@ -5393,7 +5397,7 @@ function App() {
         <footer className="left-footer">
           <div className="footer-cta">
             <span className="footer-cta__text">Experimental sensory coordination&mdash;</span>
-            <a href="mailto:thekevinboyle@gmail.com?subject=Ayoo" className="footer-cta__link">Send a signal</a>
+            <a href="mailto:thekevinboyle@gmail.com?subject=Ayoo" className="footer-cta__link" onClick={() => trackEvent('Email Click')}>Send a signal</a>
           </div>
           <div className="footer-meta">
             <span>2026 &copy; Kevin Boyle</span>
