@@ -1295,11 +1295,32 @@ function GlitchCaptureGrid({ jogIndex, jogEnlarged, jogZoom, onJogData, resetSig
 
   const layout = layoutRef.current || [];
   const caps = capturesRef.current;
+  const wrapperRef = useRef(null);
+
+  // Compute popover size preserving cell aspect ratio
+  const cell = layout[jogIndex];
+  let popoverStyle = {};
+  if (cell && wrapperRef.current) {
+    const rect = wrapperRef.current.getBoundingClientRect();
+    const cellW = (cell.cs / GRID_COLS) * rect.width;
+    const cellH = (cell.rs / GRID_ROWS) * rect.height;
+    const scale = 2 + jogZoom * 4;
+    let pw = cellW * scale;
+    let ph = cellH * scale;
+    const maxW = rect.width * 0.9;
+    const maxH = rect.height * 0.85;
+    if (pw > maxW) { ph *= maxW / pw; pw = maxW; }
+    if (ph > maxH) { pw *= maxH / ph; ph = maxH; }
+    popoverStyle.width = `${pw}px`;
+    popoverStyle.height = `${ph}px`;
+  } else {
+    popoverStyle.width = `${40 + jogZoom * 50}%`;
+  }
 
   return (
     <>
     <CaptureTracker tracker={tracker} />
-    <div className="capture-grid-wrapper">
+    <div className="capture-grid-wrapper" ref={wrapperRef}>
       <svg width="0" height="0" style={{ position: 'absolute' }}>
         <defs>
           <filter id="dither-filter" colorInterpolationFilters="sRGB">
@@ -1353,7 +1374,7 @@ function GlitchCaptureGrid({ jogIndex, jogEnlarged, jogZoom, onJogData, resetSig
       })}
       </div>
       {jogEnlarged && jogIndex >= 0 && jogIndex < caps.length && (
-        <div className="capture-popover" style={{ width: `${40 + jogZoom * 50}%` }}>
+        <div className="capture-popover" style={popoverStyle}>
           <img src={caps[jogIndex]} alt="" />
           <div className="capture-popover__hud">
             <span className="capture-popover__label">{layout[jogIndex]?.label}</span>
@@ -1396,9 +1417,9 @@ function HudFader({ label, value, onChange, onPress, onRelease, width, height })
 
       // Track groove — wide channel
       const grooveW = 18 * s;
-      ctx.fillStyle = g(0.04);
+      ctx.fillStyle = g(0.08);
       ctx.fillRect(trackX - grooveW / 2, trackTop, grooveW, trackH);
-      ctx.strokeStyle = g(0.08);
+      ctx.strokeStyle = g(0.15);
       ctx.lineWidth = 0.5 * s;
       ctx.strokeRect(trackX - grooveW / 2, trackTop, grooveW, trackH);
 
@@ -1406,8 +1427,8 @@ function HudFader({ label, value, onChange, onPress, onRelease, width, height })
       const handleY = trackTop + (1 - value) * trackH;
       const hw = 22 * s;
       const hh = 10 * s;
-      ctx.fillStyle = g(dragRef.current.active ? 0.2 : 0.1);
-      ctx.strokeStyle = g(dragRef.current.active ? 0.45 : 0.2);
+      ctx.fillStyle = g(dragRef.current.active ? 0.35 : 0.2);
+      ctx.strokeStyle = g(dragRef.current.active ? 0.6 : 0.35);
       ctx.lineWidth = 1 * s;
       ctx.beginPath();
       ctx.roundRect(trackX - hw / 2, handleY - hh / 2, hw, hh, 2 * s);
@@ -1415,7 +1436,7 @@ function HudFader({ label, value, onChange, onPress, onRelease, width, height })
       ctx.stroke();
 
       // Handle notch
-      ctx.strokeStyle = g(dragRef.current.active ? 0.5 : 0.25);
+      ctx.strokeStyle = g(dragRef.current.active ? 0.7 : 0.4);
       ctx.lineWidth = 0.5 * s;
       ctx.beginPath();
       ctx.moveTo(trackX - 4 * s, handleY);
@@ -1424,7 +1445,7 @@ function HudFader({ label, value, onChange, onPress, onRelease, width, height })
 
       // Label
       ctx.font = `${6 * s}px 'ISO', monospace`;
-      ctx.fillStyle = g(0.2);
+      ctx.fillStyle = g(0.4);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText(label || '', trackX, (FADER_H - 10) * s);
@@ -1508,12 +1529,12 @@ function ScopeDisplay({ scopeMode, clipCount, layout }) {
       const scopeR = Math.min(scopeW, scopeH2) * 0.42;
 
       // Border
-      ctx.strokeStyle = g(0.06);
+      ctx.strokeStyle = g(0.12);
       ctx.lineWidth = 0.5 * s;
       ctx.strokeRect(0, 0, scopeW, scopeH2);
 
       // Crosshair
-      ctx.strokeStyle = g(0.03);
+      ctx.strokeStyle = g(0.06);
       ctx.beginPath();
       ctx.moveTo(0, scopeCy); ctx.lineTo(scopeW, scopeCy);
       ctx.moveTo(scopeCx, 0); ctx.lineTo(scopeCx, scopeH2);
@@ -1539,7 +1560,7 @@ function ScopeDisplay({ scopeMode, clipCount, layout }) {
       if (scopeMode === 0) {
         // STRAND
         const arms = 5 + Math.floor(fillRatio * 4);
-        ctx.strokeStyle = g(0.08 + fillRatio * 0.15 + burst * 0.15);
+        ctx.strokeStyle = g(0.15 + fillRatio * 0.25 + burst * 0.2);
         ctx.lineWidth = (0.8 + burst * 0.5) * s;
         for (let a = 0; a < arms; a++) {
           const armAngle = (a / arms) * Math.PI * 2 + elapsed * 0.2 + seed;
@@ -1556,7 +1577,7 @@ function ScopeDisplay({ scopeMode, clipCount, layout }) {
           }
           ctx.stroke();
         }
-        ctx.strokeStyle = g(0.12 + burst * 0.2);
+        ctx.strokeStyle = g(0.2 + burst * 0.25);
         ctx.lineWidth = 0.5 * s;
         ctx.beginPath();
         for (let i = 0; i <= 60; i++) {
@@ -1575,7 +1596,7 @@ function ScopeDisplay({ scopeMode, clipCount, layout }) {
         for (let l = 0; l < layers; l++) {
           const lr = baseR * (0.4 + l * 0.3);
           const lk = k + l * 0.5;
-          ctx.strokeStyle = g((0.06 + fillRatio * 0.1 + burst * 0.1) * (1 - l * 0.25));
+          ctx.strokeStyle = g((0.12 + fillRatio * 0.18 + burst * 0.15) * (1 - l * 0.25));
           ctx.lineWidth = (1 - l * 0.3 + burst * 0.3) * s;
           ctx.beginPath();
           for (let i = 0; i <= steps; i++) {
@@ -1588,7 +1609,7 @@ function ScopeDisplay({ scopeMode, clipCount, layout }) {
           }
           ctx.stroke();
         }
-        ctx.strokeStyle = g(0.04 + burst * 0.06);
+        ctx.strokeStyle = g(0.08 + burst * 0.1);
         ctx.lineWidth = 0.5 * s;
         for (let c = 0; c < 6; c++) {
           const angle = (c / 6) * Math.PI + elapsed * 0.1;
@@ -1607,14 +1628,14 @@ function ScopeDisplay({ scopeMode, clipCount, layout }) {
         let ax = 0.1, ay = 0.1;
         const scale = baseR * 0.35;
 
-        ctx.fillStyle = g(0.1 + fillRatio * 0.15 + burst * 0.2);
+        ctx.fillStyle = g(0.18 + fillRatio * 0.2 + burst * 0.25);
         for (let i = 0; i < 2000; i++) {
           const nx = Math.sin(a1 * ay) + c1 * Math.cos(a1 * ax);
           const ny = Math.sin(b1 * ax) + d1 * Math.cos(b1 * ay);
           ax = nx; ay = ny;
           if (i > 20) ctx.fillRect(scopeCx + ax * scale, scopeCy + ay * scale, 1 * s, 1 * s);
         }
-        ctx.fillStyle = g(0.04 + burst * 0.08);
+        ctx.fillStyle = g(0.08 + burst * 0.12);
         ax = 0.5; ay = 0.5;
         const a2 = a1 + 0.1, b2 = b1 - 0.1;
         for (let i = 0; i < 1000; i++) {
@@ -1673,9 +1694,9 @@ function HudToggle({ labels, value, onChange }) {
       ctx.lineTo(pillX + r, pillY + pillH);
       ctx.arc(pillX + r, pillY + r, r, Math.PI / 2, -Math.PI / 2);
       ctx.closePath();
-      ctx.fillStyle = g(0.03);
+      ctx.fillStyle = g(0.06);
       ctx.fill();
-      ctx.strokeStyle = g(0.08);
+      ctx.strokeStyle = g(0.15);
       ctx.lineWidth = 0.5 * s;
       ctx.stroke();
 
@@ -1683,7 +1704,7 @@ function HudToggle({ labels, value, onChange }) {
       const segW = pillW / 3;
       for (let i = 1; i < 3; i++) {
         const dx = pillX + i * segW;
-        ctx.strokeStyle = g(0.06);
+        ctx.strokeStyle = g(0.12);
         ctx.beginPath();
         ctx.moveTo(dx, pillY + 3 * s);
         ctx.lineTo(dx, pillY + pillH - 3 * s);
@@ -1701,7 +1722,7 @@ function HudToggle({ labels, value, onChange }) {
       ctx.lineTo(activeX + ir + 2 * s, pillY + pillH - 2 * s);
       ctx.arc(activeX + ir + 2 * s, pillY + r, ir, Math.PI / 2, -Math.PI / 2);
       ctx.closePath();
-      ctx.fillStyle = g(0.08);
+      ctx.fillStyle = g(0.15);
       ctx.fill();
 
       // Labels
@@ -1710,7 +1731,7 @@ function HudToggle({ labels, value, onChange }) {
       ctx.textBaseline = 'middle';
       for (let i = 0; i < 3; i++) {
         const lx = pillX + i * segW + segW / 2;
-        ctx.fillStyle = g(i === value ? 0.5 : 0.15);
+        ctx.fillStyle = g(i === value ? 0.7 : 0.3);
         ctx.fillText(labels[i], lx, pillY + r);
       }
       ctx.textAlign = 'left';
@@ -1764,8 +1785,8 @@ function HudKnob({ label, value, steps, activeTick, onChange, onPress, onRelease
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // Filled knob
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
-      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
       ctx.lineWidth = 0.5 * dpr;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -1774,7 +1795,7 @@ function HudKnob({ label, value, steps, activeTick, onChange, onPress, onRelease
 
       // Indicator notch — light
       const indicatorAngle = value * Math.PI * 2 - Math.PI / 2;
-      ctx.strokeStyle = dragRef.current.active ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)';
+      ctx.strokeStyle = dragRef.current.active ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.65)';
       ctx.lineWidth = 1.5 * dpr;
       ctx.beginPath();
       ctx.moveTo(cx + Math.cos(indicatorAngle) * r * 0.55, cy + Math.sin(indicatorAngle) * r * 0.55);
@@ -1783,7 +1804,7 @@ function HudKnob({ label, value, steps, activeTick, onChange, onPress, onRelease
 
       // Label
       ctx.font = `${6 * dpr}px 'ISO', monospace`;
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText(label || '', cx, cy + r + 3 * dpr);
@@ -1896,22 +1917,22 @@ function GridControlsHud({ clipCount, jogIndex, layout }) {
 
       // ── Module 1: Grid minimap ──
       ctx.font = `${6 * s}px 'ISO', monospace`;
-      ctx.fillStyle = g(0.2);
+      ctx.fillStyle = g(0.4);
       ctx.fillText('GRID MAP', col1, pad);
       for (let i = 0; i < Math.min(clipCount, layout.length); i++) {
         const c = layout[i];
         if (!c) continue;
         const isSelected = i === jogIndex;
-        ctx.fillStyle = isSelected ? g(0.55) : g(0.08);
+        ctx.fillStyle = isSelected ? g(0.65) : g(0.15);
         ctx.fillRect(col1 + c.col * cellW, contentTop + c.row * cellH, c.cs * cellW - 1 * s, c.rs * cellH - 1 * s);
       }
-      ctx.strokeStyle = g(0.06);
+      ctx.strokeStyle = g(0.12);
       ctx.lineWidth = 0.5 * s;
       ctx.strokeRect(col1, contentTop, mapW, mapH);
 
       // ── Module 2: Clip info (contextual) ──
       ctx.font = `${6 * s}px 'ISO', monospace`;
-      ctx.fillStyle = g(0.2);
+      ctx.fillStyle = g(0.4);
       ctx.fillText('CLIP DATA', col2, pad);
 
       ctx.textBaseline = 'top';
@@ -1949,34 +1970,34 @@ function GridControlsHud({ clipCount, jogIndex, layout }) {
         // Large number — randomized per capture
         const bigNum = String(Math.floor(h(capSeed + 1) * 99) + 1).padStart(2, '0');
         ctx.font = `${36 * s}px 'ISO', monospace`;
-        ctx.fillStyle = g(0.04);
+        ctx.fillStyle = g(0.08);
         ctx.fillText(bigNum, decoLeft, decoTop);
         // Random dimension-like string
         const dimA = Math.floor(h(capSeed + 2) * 8) + 1;
         const dimB = Math.floor(h(capSeed + 3) * 8) + 1;
         ctx.font = `${22 * s}px 'ISO', monospace`;
-        ctx.fillStyle = g(0.035);
+        ctx.fillStyle = g(0.07);
         ctx.fillText(dimA + '×' + dimB, decoLeft, decoTop + 38 * s);
         // Symbol pair
         const s1 = syms[Math.floor(h(capSeed + 4) * syms.length)];
         const s2 = syms[Math.floor(h(capSeed + 5) * syms.length)];
         ctx.font = `${16 * s}px 'ISO', monospace`;
-        ctx.fillStyle = g(0.06);
+        ctx.fillStyle = g(0.1);
         ctx.fillText(s1 + ' ' + s2, decoLeft, decoTop + 62 * s);
         // Hex address
         const hexVal = (Math.floor(h(capSeed + 6) * 0xFFFFFFFF) >>> 0).toString(16).toUpperCase().padStart(8, '0');
         ctx.font = `${8 * s}px 'ISO', monospace`;
-        ctx.fillStyle = g(0.05);
+        ctx.fillStyle = g(0.09);
         ctx.fillText('0x' + hexVal, decoLeft, decoTop + 80 * s);
         // Random word
         const word = words[Math.floor(h(capSeed + 7) * words.length)];
         ctx.font = `${7 * s}px 'ISO', monospace`;
-        ctx.fillStyle = g(0.04);
+        ctx.fillStyle = g(0.08);
         ctx.fillText(word, decoLeft, decoTop + 92 * s);
         // Extra large symbol — bottom right
         const bigSym = syms[Math.floor(h(capSeed + 8) * syms.length)];
         ctx.font = `${48 * s}px 'ISO', monospace`;
-        ctx.fillStyle = g(0.025);
+        ctx.fillStyle = g(0.05);
         ctx.textAlign = 'right';
         ctx.fillText(bigSym, decoLeft + decoW, decoTop + decoH - 20 * s);
         ctx.textAlign = 'left';
@@ -1984,20 +2005,20 @@ function GridControlsHud({ clipCount, jogIndex, layout }) {
         ctx.restore();
 
         lines.forEach((line, i) => {
-          ctx.fillStyle = g(i === 0 ? 0.35 : 0.18);
+          ctx.fillStyle = g(i === 0 ? 0.5 : 0.3);
           ctx.font = `${6 * s}px 'ISO', monospace`;
           ctx.fillText(line, col2, dataTop + i * lineH);
         });
       } else {
         // Empty state typography
         ctx.font = `${28 * s}px 'ISO', monospace`;
-        ctx.fillStyle = g(0.03);
+        ctx.fillStyle = g(0.06);
         ctx.fillText('--', col2, contentTop + 2 * s);
         ctx.font = `${12 * s}px 'ISO', monospace`;
-        ctx.fillStyle = g(0.04);
+        ctx.fillStyle = g(0.08);
         ctx.fillText('◇ IDLE', col2, contentTop + 36 * s);
         ctx.font = `${6 * s}px 'ISO', monospace`;
-        ctx.fillStyle = g(0.08);
+        ctx.fillStyle = g(0.15);
         ctx.fillText('NO SIGNAL', col2, contentTop + mapH - 11 * s);
       }
       ctx.textBaseline = 'alphabetic';
@@ -2017,7 +2038,7 @@ function GridControlsHud({ clipCount, jogIndex, layout }) {
       const meterLabels = ['ACTIVITY', 'ENTROPY', 'FLUX', 'DENSITY'];
       for (let gr = 0; gr < groupCount; gr++) {
         const gx = col3 + gr * (groupW + groupGap);
-        ctx.fillStyle = g(0.15);
+        ctx.fillStyle = g(0.3);
         ctx.fillText(meterLabels[gr], gx, pad);
         for (let i = 0; i < barsPerGroup; i++) {
           const x = gx + i * (barW + barGap);
@@ -2028,7 +2049,7 @@ function GridControlsHud({ clipCount, jogIndex, layout }) {
           else h = (Math.sin(-elapsed * 0.9 + i * 2.1 + seed * 4) * 0.5 + 0.5) * (0.4 + Math.sin(-elapsed * 3 + i) * 0.3 + 0.3);
           const barH = h * meterH * 0.85;
           const isHot = i === (Math.floor(elapsed * (2 + gr)) % barsPerGroup);
-          ctx.fillStyle = g(0.04 + (isHot ? 0.06 : 0));
+          ctx.fillStyle = g(0.08 + (isHot ? 0.1 : 0));
           ctx.fillRect(x, contentTop + meterH - barH, barW, barH);
         }
       }
@@ -2040,13 +2061,13 @@ function GridControlsHud({ clipCount, jogIndex, layout }) {
       const lcdH = H * s - lcdTop - 10 * s;
 
       ctx.font = `${6 * s}px 'ISO', monospace`;
-      ctx.fillStyle = g(0.15);
+      ctx.fillStyle = g(0.3);
       ctx.fillText('MATRIX', lcdX, lcdTop - labelH + 2 * s);
 
       // LCD background
-      ctx.fillStyle = g(0.02);
+      ctx.fillStyle = g(0.04);
       ctx.fillRect(lcdX, lcdTop, lcdW, lcdH);
-      ctx.strokeStyle = g(0.06);
+      ctx.strokeStyle = g(0.12);
       ctx.lineWidth = 0.5 * s;
       ctx.strokeRect(lcdX, lcdTop, lcdW, lcdH);
 
@@ -2070,7 +2091,7 @@ function GridControlsHud({ clipCount, jogIndex, layout }) {
           const lit = Math.sin(phase) > 0.85;
 
           if (lit) {
-            ctx.fillStyle = g(0.25 + rnd * 0.15);
+            ctx.fillStyle = g(0.35 + rnd * 0.2);
             ctx.fillRect(dx, dy, dotSize, dotSize);
           }
         }
@@ -2081,9 +2102,9 @@ function GridControlsHud({ clipCount, jogIndex, layout }) {
       const scanLineW = col2 + infoW - col1;
       const scanY = scopeBottom - 3 * s;
       const scanPos = ((elapsed * 40 + seed * 100) % (scanLineW / s)) * s;
-      ctx.fillStyle = g(0.04);
+      ctx.fillStyle = g(0.07);
       ctx.fillRect(col1, scanY, scanLineW, 3 * s);
-      ctx.fillStyle = g(0.2);
+      ctx.fillStyle = g(0.3);
       ctx.fillRect(col1 + scanPos, scanY, 20 * s, 3 * s);
 
       frameRef.current = requestAnimationFrame(draw);
