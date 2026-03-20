@@ -5462,6 +5462,7 @@ function App() {
         ) : (
           <>
             <AudioToggle muted={audioMuted} onToggle={() => { SoundEngine.init(); const next = !audioMuted; setAudioMuted(next); SoundEngine.setMute(next); if (!next) SoundEngine.uiClick(); }} />
+            <SoundHelpButton />
             <CycleVizButton onClick={() => { setVizIndex((i) => (i + 1) % visualizations.length); SoundEngine.uiClick(); }} onHover={() => SoundEngine.play(vizIndex, 'hover-button')} index={vizIndex} />
             <VisualizationField vizIndex={vizIndex} />
           </>
@@ -5517,6 +5518,51 @@ function AudioToggle({ muted, onToggle }) {
         )}
       </svg>
     </button>
+  );
+}
+
+// ========================
+// SOUND HELP BUTTON + MODAL
+// ========================
+
+function SoundHelpButton() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button className="sound-help-btn" onClick={() => setOpen(true)} aria-label="How to play">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="0.75" />
+          <text x="8" y="11.5" textAnchor="middle" fill="currentColor" fontSize="10" fontFamily="var(--font)">?</text>
+        </svg>
+      </button>
+      {open && (
+        <div className="sound-help-overlay" onClick={() => setOpen(false)}>
+          <div className="sound-help-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="sound-help-modal__close" onClick={() => setOpen(false)}>&times;</button>
+            <div className="sound-help-modal__title">SOUND FIELD</div>
+            <div className="sound-help-modal__body">
+              <div className="sound-help-modal__row">
+                <span className="sound-help-modal__key">MOVE</span>
+                <span className="sound-help-modal__desc">Hover across the visualization to trigger percussive hits as you cross zones</span>
+              </div>
+              <div className="sound-help-modal__row">
+                <span className="sound-help-modal__key">L-CLICK</span>
+                <span className="sound-help-modal__desc">Hold left click for an accelerating kick drum roll</span>
+              </div>
+              <div className="sound-help-modal__row">
+                <span className="sound-help-modal__key">R-CLICK</span>
+                <span className="sound-help-modal__desc">Hold right click for an accelerating snare/clap roll</span>
+              </div>
+              <div className="sound-help-modal__row">
+                <span className="sound-help-modal__key">CYCLE</span>
+                <span className="sound-help-modal__desc">Use the bottom-right button to switch visualization &amp; sound palette</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
